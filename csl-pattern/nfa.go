@@ -1,3 +1,16 @@
+// Package main implements non-deterministic finite automata for pattern
+// matching. It provides a way to compile patterns into NFA programs and match
+// input strings against them. The NFA implementation supports various pattern
+// constructs, including literals, built-in patterns, sequences, alternatives,
+// and repetitions. The NFA can be used directly for matching or can be
+// converted into a DFA for more efficient matching.
+//
+// The NFA implementation includes optimizations for direct literal choices and
+// fixed literal repeats, allowing for faster matching in specific cases. The
+// NFA workspace manages the active states during matching and provides caching
+// mechanisms to improve performance when matching multiple inputs against the
+// same NFA program.
+
 package main
 
 import (
@@ -6,62 +19,81 @@ import (
 	"unicode/utf8"
 )
 
+// These limits bound NFA and DFA construction and caching costs.
 const (
-	maxNFAStates           = 8192
-	maxDFAStates           = 1024
-	maxDFATransitions      = 8192
-	maxDFAStateSetEntries  = 65536
-	maxMatcherPoolScratch  = 81920
+	// maxNFAStates is the maximum number of states in a compiled NFA.
+	maxNFAStates = 8192
+	// maxDFAStates is the maximum number of cached DFA states per workspace.
+	maxDFAStates = 1024
+	// maxDFATransitions is the maximum number of cached DFA transitions.
+	maxDFATransitions = 8192
+	// maxDFAStateSetEntries limits the total states stored across cached sets.
+	maxDFAStateSetEntries = 65536
+	// maxMatcherPoolScratch limits scratch storage retained by matcher pools.
+	maxMatcherPoolScratch = 81920
+	// maxLiteralAlternatives bounds literal expansion during compilation.
 	maxLiteralAlternatives = 256
 )
 
+// matchStrategy identifies the execution path used to match a pattern.
 type matchStrategy uint8
 
 const (
+	// strategyDirect matches patterns with a specialized direct matcher.
 	strategyDirect matchStrategy = iota
+	// strategyNFA matches patterns using a compiled NFA.
 	strategyNFA
+	// strategyInterpreter matches patterns with the general interpreter.
 	strategyInterpreter
 )
 
+// nfaTransition describes a literal or built-in transition to another state.
 type nfaTransition struct {
 	target  int
 	literal rune
 	builtin string
 }
 
+// nfaState stores outgoing transitions and epsilon edges in an NFA.
 type nfaState struct {
 	epsilon            []int
 	literalTransitions []nfaTransition
 	builtinTransitions []nfaTransition
 }
 
+// nfaProgram contains the states and endpoints of a compiled NFA.
 type nfaProgram struct {
 	states []nfaState
 	start  int
 	accept int
 }
 
+// nfaFragment identifies the entry and exit states of a compiled expression.
 type nfaFragment struct {
 	start  int
 	accept int
 }
 
+// nfaBuilder constructs NFA states and connects expression fragments.
 type nfaBuilder struct {
 	states []nfaState
 }
 
+// fixedLiteralRepeat stores equal-width literal choices and their repeat bounds.
 type fixedLiteralRepeat struct {
 	words [][]rune
 	min   int
 	max   int
 }
 
+// directLiteralChoice stores alternatives as a shared prefix and suffixes.
 type directLiteralChoice struct {
 	prefix     string
 	suffixes   []string
 	prefixFree bool
 }
 
+// directSequencePart represents one literal, built-in, choice, or repeat part.
 type directSequencePart struct {
 	literal     []rune
 	builtin     string
@@ -71,10 +103,12 @@ type directSequencePart struct {
 	repeatMax   int
 }
 
+// directSequence is a specialized matcher plan for supported sequences.
 type directSequence struct {
 	parts []directSequencePart
 }
 
+// compileDirectLiteralChoice compiles a literal-only alternative for direct matching.
 func compileDirectLiteralChoice(root *node) (*directLiteralChoice, bool) {
 	for root.kind == nodeReference && root.target != nil {
 		root = root.target
@@ -124,6 +158,7 @@ func compileDirectLiteralChoice(root *node) (*directLiteralChoice, bool) {
 	return choice, true
 }
 
+// matches reports whether input is exactly one of the compiled alternatives.
 func (c *directLiteralChoice) matches(input string) bool {
 	if !strings.HasPrefix(input, c.prefix) {
 		return false
@@ -139,6 +174,7 @@ func (c *directLiteralChoice) matches(input string) bool {
 	return false
 }
 
+// matchPrefix returns the length of the first matching alternative prefix.
 func (c *directLiteralChoice) matchPrefix(input string) (int, bool) {
 	if !strings.HasPrefix(input, c.prefix) {
 		return 0, false
@@ -154,6 +190,7 @@ func (c *directLiteralChoice) matchPrefix(input string) (int, bool) {
 	return 0, false
 }
 
+// compileDirectSequence builds a direct matcher plan when the sequence supports it.
 func compileDirectSequence(root *node) (*directSequence, bool) {
 	plan := &directSequence{}
 
@@ -165,6 +202,7 @@ func compileDirectSequence(root *node) (*directSequence, bool) {
 	return plan, true
 }
 
+// appendDirectSequenceParts flattens supported nodes into a direct matcher plan.
 func appendDirectSequenceParts(n *node, plan *directSequence, hasSpecial *bool) bool {
 	switch n.kind {
 	case nodeReference:
@@ -218,10 +256,12 @@ func appendDirectSequenceParts(n *node, plan *directSequence, hasSpecial *bool) 
 	}
 }
 
+// matches reports whether input matches the complete direct sequence.
 func (p *directSequence) matches(input string) bool {
 	return p.matchesFrom(0, input)
 }
 
+// matchesFrom matches the sequence suffix beginning at index against input.
 func (p *directSequence) matchesFrom(index int, input string) bool {
 	if index == len(p.parts) {
 		return len(input) == 0
@@ -303,6 +343,7 @@ func (p *directSequence) matchesFrom(index int, input string) bool {
 	return p.matchesFrom(index+1, input)
 }
 
+// nfaWorkspace reuses scratch buffers and caches DFA states while matching.
 type nfaWorkspace struct {
 	active       []int
 	next         []int
@@ -320,6 +361,7 @@ type nfaWorkspace struct {
 	stats        *nfaStats
 }
 
+// nfaStats records NFA and DFA work performed during a match.
 type nfaStats struct {
 	closureVisits     int
 	activeStateVisits int
@@ -329,11 +371,13 @@ type nfaStats struct {
 	dfaFallbacks      int
 }
 
+// dfaTransitionKey identifies a cached transition by state and input rune.
 type dfaTransitionKey struct {
 	state int
 	r     rune
 }
 
+// isDirectExpression reports whether a node can use the direct matcher.
 func isDirectExpression(n *node, root bool) bool {
 	if n.kind == nodeReference {
 		return n.target != nil && isDirectExpression(n.target, root)
@@ -361,6 +405,7 @@ func isDirectExpression(n *node, root bool) bool {
 	}
 }
 
+// compileNFA builds an NFA for root, returning false when it is unsupported or too large.
 func compileNFA(root *node) (*nfaProgram, bool) {
 	builder := nfaBuilder{}
 
@@ -378,6 +423,7 @@ func compileNFA(root *node) (*nfaProgram, bool) {
 	return &nfaProgram{states: builder.states, start: fragment.start, accept: fragment.accept}, true
 }
 
+// newState appends a state unless the NFA state limit has been reached.
 func (b *nfaBuilder) newState() (int, bool) {
 	if len(b.states) >= maxNFAStates {
 		return 0, false
@@ -389,10 +435,12 @@ func (b *nfaBuilder) newState() (int, bool) {
 	return id, true
 }
 
+// addEpsilon adds a transition that consumes no input.
 func (b *nfaBuilder) addEpsilon(from, to int) {
 	b.states[from].epsilon = append(b.states[from].epsilon, to)
 }
 
+// compile converts an expression node into an NFA fragment.
 func (b *nfaBuilder) compile(n *node) (nfaFragment, bool) {
 	switch n.kind {
 	case nodeLiteral:
@@ -567,6 +615,7 @@ func (b *nfaBuilder) compile(n *node) (nfaFragment, bool) {
 	}
 }
 
+// collectLiteralWords expands a literal-only expression into its possible words.
 func collectLiteralWords(n *node) ([][]rune, bool) {
 	switch n.kind {
 	case nodeLiteral:
@@ -617,6 +666,7 @@ func collectLiteralWords(n *node) ([][]rune, bool) {
 	}
 }
 
+// compileFixedLiteralRepeat recognizes repeats of equal-width literal choices.
 func compileFixedLiteralRepeat(root *node) (*fixedLiteralRepeat, bool) {
 	for root.kind == nodeReference && root.target != nil {
 		root = root.target
@@ -641,6 +691,7 @@ func compileFixedLiteralRepeat(root *node) (*fixedLiteralRepeat, bool) {
 	return &fixedLiteralRepeat{words: words, min: root.min, max: root.max}, true
 }
 
+// matches reports whether input consists of an allowed number of repeated words.
 func (p *fixedLiteralRepeat) matches(input string) bool {
 	count := 0
 	for len(input) > 0 {
@@ -686,11 +737,13 @@ func (p *fixedLiteralRepeat) matches(input string) bool {
 	return count >= p.min
 }
 
+// literalTrieNode represents a node in a trie of literal alternatives.
 type literalTrieNode struct {
 	children map[rune]*literalTrieNode
 	terminal bool
 }
 
+// compileLiteralTrie builds an NFA fragment from literal words using a trie.
 func (b *nfaBuilder) compileLiteralTrie(words [][]rune) (nfaFragment, bool) {
 	root := &literalTrieNode{}
 	for _, word := range words {
@@ -727,6 +780,7 @@ func (b *nfaBuilder) compileLiteralTrie(words [][]rune) (nfaFragment, bool) {
 	return nfaFragment{start: start, accept: accept}, true
 }
 
+// compileTrieNode adds a trie node and its descendants to the NFA.
 func (b *nfaBuilder) compileTrieNode(node *literalTrieNode, state, accept int) bool {
 	if node.terminal {
 		b.addEpsilon(state, accept)
@@ -754,6 +808,7 @@ func (b *nfaBuilder) compileTrieNode(node *literalTrieNode, state, accept int) b
 	return true
 }
 
+// literalTarget finds the transition for r and reports the number of comparisons.
 func (s *nfaState) literalTarget(r rune) (int, bool, int) {
 	transitions := s.literalTransitions
 	if len(transitions) == 1 {
@@ -788,11 +843,13 @@ func (s *nfaState) literalTarget(r rune) (int, bool, int) {
 	return 0, false, checks
 }
 
+// matches reports whether input is accepted by the NFA program.
 func (n *nfaProgram) matches(input string) bool {
 	var workspace nfaWorkspace
 	return workspace.match(n, input)
 }
 
+// match runs the NFA against input, using cached DFA transitions when available.
 func (w *nfaWorkspace) match(program *nfaProgram, input string) bool {
 	if w.stats != nil {
 		*w.stats = nfaStats{}
@@ -934,6 +991,7 @@ func (w *nfaWorkspace) match(program *nfaProgram, input string) bool {
 	return false
 }
 
+// prepareCache clears the workspace caches when matching a different program.
 func (w *nfaWorkspace) prepareCache(program *nfaProgram) {
 	if w.program == program {
 		return
@@ -949,6 +1007,7 @@ func (w *nfaWorkspace) prepareCache(program *nfaProgram) {
 	w.startCached = false
 }
 
+// cacheState returns the cached DFA ID for states, adding it when capacity permits.
 func (w *nfaWorkspace) cacheState(states []int) (int, bool) {
 	if w.cacheFull {
 		return 0, false
@@ -977,6 +1036,7 @@ func (w *nfaWorkspace) cacheState(states []int) (int, bool) {
 	return state, true
 }
 
+// cacheTransition stores a DFA transition unless the cache has reached its limit.
 func (w *nfaWorkspace) cacheTransition(key dfaTransitionKey, target int) bool {
 	if _, exists := w.transitions[key]; exists {
 		return true
@@ -992,6 +1052,7 @@ func (w *nfaWorkspace) cacheTransition(key dfaTransitionKey, target int) bool {
 	return true
 }
 
+// addClosure adds stateID and all epsilon-reachable states to active.
 func (w *nfaWorkspace) addClosure(program *nfaProgram, stateID int, active *[]int) {
 	w.stack = append(w.stack[:0], stateID)
 	for len(w.stack) > 0 {
@@ -1013,6 +1074,7 @@ func (w *nfaWorkspace) addClosure(program *nfaProgram, stateID int, active *[]in
 	}
 }
 
+// nextGeneration advances the visitation marker, clearing it if it wraps around.
 func (w *nfaWorkspace) nextGeneration() {
 	w.generation++
 	if w.generation == 0 {
@@ -1021,6 +1083,7 @@ func (w *nfaWorkspace) nextGeneration() {
 	}
 }
 
+// matches reports whether r satisfies this transition's literal or built-in matcher.
 func (t nfaTransition) matches(r rune) bool {
 	if t.builtin != "" {
 		return builtinMatches(t.builtin, r)

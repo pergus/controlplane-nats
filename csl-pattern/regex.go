@@ -1,3 +1,14 @@
+// Package main implements regular expression to CSL pattern translation.
+// The translation is limited to a subset of Go's regular expression syntax
+// that can be represented in CSL. Unsupported features include:
+//
+//   - Assertions: ^, $, \b, \B
+//   - Backreferences: \1, \2, ...
+//   - Non-greedy quantifiers: *?, +?, ??, {n,m}?
+//   - Lookahead and lookbehind assertions
+//   - Named capture groups
+//   - Unicode character classes (e.g., \p{L})
+
 package main
 
 import (
