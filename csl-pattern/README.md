@@ -71,15 +71,93 @@ These atoms match strings rather than individual characters:
 
 For example, `pattern WebURL { URL }` matches `https://example.com/path`.
 
-## Matching performance
+## Matcher selection and execution
 
-Compilation chooses a matcher for each definition. Simple literals and character-atom sequences, top-level repetitions of single-rune matchers, pure literal alternatives, prefix-free literal choices in sequences, and fixed-width repetitions of literal alternatives use direct scans. Literal-only alternatives embedded in more complex expressions compile into shared-prefix tries with indexed rune transitions. Other regular combinations of literals, character atoms, sequences, alternatives, and repetitions compile to a Thompson NFA. NFA workspaces lazily cache transitions between active-state sets, with fixed state, transition, and memory caps; after a cap is reached, matching falls back to NFA simulation. Multi-character built-ins such as `URL` and `CamelCase`, or patterns that exceed the NFA state limit, use the memoized interpreter.
+When a CSL definition is compiled, the compiler chooses the most suitable matcher for each pattern.
 
-For repeated matches against a compiled program, create one `Matcher` with `program.NewMatcher()` and call its `Match` method. It reuses rune, NFA state-set, and lazy-cache buffers; once warmed, NFA benchmark patterns match with zero allocations. Create a separate matcher for each concurrent goroutine. `Program.Match` remains available for one-off matches.
+- **Direct scans** are used for simple patterns, including literals, sequences of character atoms, top-level repetitions of single-rune matchers, pure literal alternatives, prefix-free literal choices within sequences, and fixed-width repetitions of literal alternatives.
+- **Shared-prefix tries** are used when literal-only alternatives appear inside more complex expressions. These tries share common prefixes and use indexed rune transitions.
+- **Thompson NFAs** handle other combinations of literals, character atoms, sequences, alternatives, and repetitions. NFA workspaces lazily cache transitions between active-state sets. The cache has fixed limits on states, transitions, and memory. When a limit is reached, matching continues through regular NFA simulation.
+- **The memoized interpreter** handles multi-character built-ins such as `URL` and `CamelCase`, as well as patterns that exceed the NFA state limit.
 
-Run the direct-CSL, NFA, reusable-CSL, and Go-regex benchmarks with `task benchmark`. Patterns are compiled before the timed loops; the first aligned table reports match time and allocations per operation. A second table reports cold NFA active-state visits, transition checks, closure visits, and DFA cache hits/misses for each NFA case. These work counters come from a separate single-match probe and do not add instrumentation overhead to the timed run. A separate schema-regex pipeline table reports `CSLConvert`, `CSLCompile`, `RegexCompile`, precompiled `CSLMatch`/`RegexMatch`, and `CSLEndToEnd`/`RegexEndToEnd`. In a server, conversion and compilation normally happen when registering a schema; match-only rows represent per-resource validation cost. The end-to-end rows show one-shot cost for comparison. The default sample duration is 100 ms per benchmark; set `BENCHTIME=1s` for longer measurements.
+### Reusing matchers
 
-The benchmark corpus includes alternatives with disjoint or shared prefixes, nested alternatives and repetitions, repeated compound expressions, equal-length early and final failures, short/medium/long NFA inputs, and the schema specification's `username` and `domain_name` regex constraints.
+When matching multiple inputs against the same compiled program, create a reusable `Matcher` with `program.NewMatcher()` and call its `Match` method for each input.
+
+A `Matcher` reuses its internal rune buffers, NFA state-set buffers, and lazy-cache storage. After warm-up, the NFA benchmark patterns run with zero allocations.
+
+Create a separate `Matcher` for each concurrent goroutine. For one-off matches, you can continue to use `Program.Match`.
+
+## Running the benchmarks
+
+Run the benchmark suite with:
+
+```bash
+task benchmark
+```
+
+The suite compares four matching strategies:
+
+- Direct CSL matching
+- NFA matching
+- Reusable CSL matching
+- Go's regular expression engine
+
+Patterns are compiled before the timed benchmark loops, so the main benchmark results measure matching performance rather than compilation time.
+
+The output contains three sections.
+
+### 1. Matching performance
+
+The first table reports the execution time and memory allocations for each pattern and matcher. It includes:
+
+- Number of benchmark iterations (`N`)
+- Average matching time (`ns/op`)
+- Memory allocated per operation (`Bytes/op`)
+- Allocations per operation (`Allocs/op`)
+
+### 2. NFA execution statistics
+
+The second table reports the work performed by the NFA during a single match:
+
+- **Active:** active-state visits
+- **Checks:** transition checks
+- **Closure:** closure visits
+- **Hits:** DFA cache hits
+- **Misses:** DFA cache misses
+
+These counters are collected using a separate, instrumented single-match probe. They do not add instrumentation overhead to the timed benchmark results.
+
+### 3. Schema regex pipeline
+
+The final table measures the individual stages of converting and executing schema regular expressions:
+
+- `CSLConvert`: converts a regular expression into a CSL definition.
+- `CSLCompile`: compiles the resulting CSL definition.
+- `RegexCompile`: compiles the original regular expression using Go's regex engine.
+- `CSLMatch`: matches using an already-compiled CSL pattern.
+- `RegexMatch`: matches using an already-compiled Go regex.
+- `CSLEndToEnd`: measures the complete CSL conversion, compilation, and matching process.
+- `RegexEndToEnd`: measures the complete Go regex compilation and matching process.
+
+In a server application, conversion and compilation normally happen when a schema is registered, rather than for every resource being validated. Therefore, the match-only results represent the cost of validating individual resources, while the end-to-end results show the cost of processing a pattern from scratch.
+
+The default benchmark duration is 100 ms per benchmark. To run longer measurements, use:
+
+```bash
+BENCHTIME=1s task benchmark
+```
+
+## Benchmark coverage
+
+The benchmark corpus covers a range of pattern structures and input scenarios:
+
+- Alternatives with disjoint prefixes and shared prefixes
+- Nested alternatives and repetitions
+- Repeated compound expressions
+- Early and final failures using equal-length inputs
+- Short, medium, and long NFA inputs
+- The schema specification's `username` and `domain_name` regular expression constraints
 
 Run the benchmark and generate both plots in one command:
 
