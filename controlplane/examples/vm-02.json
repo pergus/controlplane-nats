@@ -1,0 +1,14 @@
+{
+  "kind": "VirtualMachine",
+  "metadata": {
+    "name": "vm-kök-02"
+  },
+  "spec": {
+    "cpu": 4,
+    "memory": 8192,
+    "image": "ubuntu-24.04",
+    "networks": [
+      "private"
+    ]
+  }
+}

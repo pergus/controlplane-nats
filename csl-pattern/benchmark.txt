@@ -1,0 +1,166 @@
+Pattern                  Engine         N        Time   Bytes/op  Allocs/op
+-------                  ------         -        ----   --------  ---------
+literal_hello            Direct   5406766 19.06 ns/op          0          0
+literal_hello            Regex    3281380 39.03 ns/op          0          0
+literal_hello            Reuse    6262789 18.98 ns/op          0          0
+literal_version          Direct   6063272 19.68 ns/op          0          0
+literal_version          Regex    3334671 35.84 ns/op          0          0
+literal_version          Reuse    6127371 19.56 ns/op          0          0
+literal_email            Direct   4127576 29.45 ns/op          0          0
+literal_email            Regex    3301660 36.04 ns/op          0          0
+literal_email            Reuse    4134016 29.23 ns/op          0          0
+literal_hyphen           Direct   5836125 20.66 ns/op          0          0
+literal_hyphen           Regex    3311334 37.13 ns/op          0          0
+literal_hyphen           Reuse    5741660 20.37 ns/op          0          0
+literal_underscore       Direct   5869549 20.43 ns/op          0          0
+literal_underscore       Regex    3267364 36.60 ns/op          0          0
+literal_underscore       Reuse    5830620 20.71 ns/op          0          0
+single_letter            Direct   7697694 15.71 ns/op          0          0
+single_letter            Regex    2925380 41.44 ns/op          0          0
+single_letter            Reuse    7678423 15.45 ns/op          0          0
+single_digit             Direct   7841449 15.19 ns/op          0          0
+single_digit             Regex    3023850 40.05 ns/op          0          0
+single_digit             Reuse    7543255 16.78 ns/op          0          0
+letters                  Direct   1000000 132.0 ns/op          0          0
+letters                  Regex     604902 189.9 ns/op          0          0
+letters                  Reuse    2661975 45.80 ns/op          0          0
+digits                   Direct   3696302 32.47 ns/op          0          0
+digits                   Regex    1000000 109.8 ns/op          0          0
+digits                   Reuse    3780201 32.03 ns/op          0          0
+lowercase_ab             Direct   3169411 38.06 ns/op          0          0
+lowercase_ab             Regex    1734519 70.08 ns/op          0          0
+lowercase_ab             Reuse    3128700 38.59 ns/op          0          0
+uppercase_CD             Direct   3226705 37.50 ns/op          0          0
+uppercase_CD             Regex    1719387 70.11 ns/op          0          0
+uppercase_CD             Reuse    3211714 36.80 ns/op          0          0
+ascii_letters            Direct   2711980 44.43 ns/op          0          0
+ascii_letters            Regex    1266652 95.26 ns/op          0          0
+ascii_letters            Reuse    2693632 44.78 ns/op          0          0
+whitespace               Direct   7428346 16.19 ns/op          0          0
+whitespace               Regex    3207966 37.50 ns/op          0          0
+whitespace               Reuse    7180308 16.30 ns/op          0          0
+any_character            Direct   8158917 15.21 ns/op          0          0
+any_character            Regex    3261552 33.25 ns/op          0          0
+any_character            Reuse    7822005 15.52 ns/op          0          0
+character_except_newline Direct   7462202 16.17 ns/op          0          0
+character_except_newline Regex    3400839 33.36 ns/op          0          0
+character_except_newline Reuse    7662793 15.90 ns/op          0          0
+one_to_three_digits      Direct   4260997 27.17 ns/op          0          0
+one_to_three_digits      Regex    1495597 79.97 ns/op          0          0
+one_to_three_digits      Reuse    4440236 27.06 ns/op          0          0
+exactly_four_digits      Direct   3769598 32.11 ns/op          0          0
+exactly_four_digits      Regex    1667182 72.42 ns/op          0          0
+exactly_four_digits      Reuse    3628647 32.07 ns/op          0          0
+one_or_more_letters      Direct   2520948 48.07 ns/op          0          0
+one_or_more_letters      Regex     627723 191.3 ns/op          0          0
+one_or_more_letters      Reuse    2511230 47.49 ns/op          0          0
+bounded_alphanumeric     Direct   1678088 71.43 ns/op          0          0
+bounded_alphanumeric     Regex     748070 162.4 ns/op          0          0
+bounded_alphanumeric     Reuse    1658752 71.68 ns/op          0          0
+optional_x               Direct   8433678 14.52 ns/op          0          0
+optional_x               Regex    3120702 38.06 ns/op          0          0
+optional_x               Reuse    8295074 14.55 ns/op          0          0
+two_or_more_x            Direct   5145190 25.73 ns/op          0          0
+two_or_more_x            Regex    2005459 58.16 ns/op          0          0
+two_or_more_x            Reuse    5143178 23.13 ns/op          0          0
+letter_then_digit        Direct   5049238 23.73 ns/op          0          0
+letter_then_digit        Regex    2218782 54.48 ns/op          0          0
+letter_then_digit        Reuse    5082573 23.68 ns/op          0          0
+cat_or_dog               Direct   7150908 16.77 ns/op          0          0
+cat_or_dog               Regex    2506273 48.22 ns/op          0          0
+cat_or_dog               Reuse    7136732 16.70 ns/op          0          0
+prefix_alternative       Direct   3114256 38.68 ns/op          0          0
+prefix_alternative       Regex    1000000 107.4 ns/op          0          0
+prefix_alternative       Reuse    3065868 38.96 ns/op          0          0
+item_number              Direct   4103604 29.21 ns/op          0          0
+item_number              Regex    1542830 77.66 ns/op          0          0
+item_number              Reuse    4025916 29.20 ns/op          0          0
+identifier               Direct   1758018 69.33 ns/op          0          0
+identifier               Regex     837111 145.1 ns/op          0          0
+identifier               Reuse    1728541 69.72 ns/op          0          0
+dotted_version           Direct   2087268 57.53 ns/op          0          0
+dotted_version           Regex    1000000 119.0 ns/op          0          0
+dotted_version           Reuse    2091162 57.12 ns/op          0          0
+date                     Direct   1859510 65.22 ns/op          0          0
+date                     Regex     864942 132.5 ns/op          0          0
+date                     Reuse    1860686 65.74 ns/op          0          0
+hex_color                Direct   1723183 68.70 ns/op          0          0
+hex_color                Regex    1331100 89.82 ns/op          0          0
+hex_color                Reuse    1746064 69.25 ns/op          0          0
+phone_number             Direct   1296804 94.70 ns/op          0          0
+phone_number             Regex     501226 243.3 ns/op          0          0
+phone_number             Reuse    1282410 94.30 ns/op          0          0
+alternatives_disjoint    Direct   8128428 14.99 ns/op          0          0
+alternatives_disjoint    Regex    1000000 104.5 ns/op          0          0
+alternatives_disjoint    Reuse    8118094 14.88 ns/op          0          0
+alternatives_shared_prefix Direct   7604863 16.70 ns/op          0          0
+alternatives_shared_prefix Regex    1614904 73.57 ns/op          0          0
+alternatives_shared_prefix Reuse    7655827 15.92 ns/op          0          0
+alternatives_shared_prefix_nfa NFA       122490 972.4 ns/op          0          0
+alternatives_shared_prefix_nfa Regex     383310 314.6 ns/op          0          0
+alternatives_shared_prefix_nfa Reuse     125419 971.0 ns/op          0          0
+nested_alternatives      Direct   8323458 14.22 ns/op          0          0
+nested_alternatives      Regex    1997713 60.22 ns/op          0          0
+nested_alternatives      Reuse    8415589 14.32 ns/op          0          0
+nested_alternatives_nfa  NFA       628545 193.8 ns/op          0          0
+nested_alternatives_nfa  Regex    1000000 118.4 ns/op          0          0
+nested_alternatives_nfa  Reuse     660489 182.2 ns/op          0          0
+nested_repetitions       NFA       650493 176.5 ns/op          0          0
+nested_repetitions       Regex    1380522 87.18 ns/op          0          0
+nested_repetitions       Reuse     741770 161.0 ns/op          0          0
+repeated_compound        Direct   3987339 30.11 ns/op          0          0
+repeated_compound        Regex    1000000 117.9 ns/op          0          0
+repeated_compound        Reuse    3972474 30.37 ns/op          0          0
+repeated_compound_nfa    NFA       901380 133.1 ns/op          0          0
+repeated_compound_nfa    Regex     971757 123.8 ns/op          0          0
+repeated_compound_nfa    Reuse     987620 121.6 ns/op          0          0
+failure_early            Direct   7687174 15.68 ns/op          0          0
+failure_early            Regex    3536666 33.99 ns/op          0          0
+failure_early            Reuse    7706138 15.73 ns/op          0          0
+failure_final            Direct     47436  2555 ns/op          0          0
+failure_final            Regex      34384  3511 ns/op          0          0
+failure_final            Reuse      47131  2544 ns/op          0          0
+success_short            NFA       439432 271.2 ns/op          0          0
+success_short            Regex     770403 154.6 ns/op          0          0
+success_short            Reuse     468520 254.7 ns/op          0          0
+success_medium           NFA        87350  1372 ns/op          0          0
+success_medium           Regex      48963  2418 ns/op          1          0
+success_medium           Reuse      86582  1375 ns/op          0          0
+success_long             NFA        24142  4823 ns/op         31          0
+success_long             Regex      12776  9530 ns/op          6          0
+success_long             Reuse      24894  4831 ns/op          0          0
+schema_username          Direct    247792 482.9 ns/op          0          0
+schema_username          Regex     583586 203.5 ns/op          0          0
+schema_username          Reuse     251131 487.3 ns/op          0          0
+schema_domain_name       NFA       483318 251.5 ns/op          0          0
+schema_domain_name       Regex     601591 204.7 ns/op          0          0
+schema_domain_name       Reuse     459717 261.5 ns/op          0          0
+
+NFA cold work (instrumented single run)
+Pattern                                Active   Checks  Closure     Hits   Misses
+alternatives_shared_prefix_nfa          60.00    52.00    61.00        0    49.00
+nested_alternatives_nfa                 20.00    14.00    21.00        0    9.000
+nested_repetitions                      50.00    18.00    52.00        0    7.000
+repeated_compound_nfa                   153.0    90.00    181.0        0    6.000
+success_short                           5.000    5.000    516.0        0    2.000
+success_medium                          27523    17365    28199        0    64.00
+success_long                            65155    40645    65159        0    256.0
+schema_domain_name                      143.0    147.0    156.0    1.000    11.00
+
+Schema regex pipeline
+Pattern                  Stage                   N        Time   Bytes/op  Allocs/op
+-------                  -----                   -        ----   --------  ---------
+schema_username          CSLConvert           6057 19208 ns/op      29876        462
+schema_username          CSLCompile          13221  8928 ns/op      20263        251
+schema_username          RegexCompile        10000 10451 ns/op      26520        403
+schema_username          CSLMatch           246439 490.0 ns/op          0          0
+schema_username          RegexMatch         587131 203.2 ns/op          0          0
+schema_username          CSLEndToEnd          3676 28557 ns/op      50792        714
+schema_username          RegexEndToEnd       10000 10815 ns/op      26530        403
+schema_domain_name       CSLConvert           4129 30291 ns/op      55153        666
+schema_domain_name       CSLCompile           3529 31120 ns/op      78832        714
+schema_domain_name       RegexCompile        59180  2037 ns/op       5328         57
+schema_domain_name       CSLMatch           484138 251.5 ns/op          0          0
+schema_domain_name       RegexMatch         590380 203.6 ns/op          0          0
+schema_domain_name       CSLEndToEnd          1642 73544 ns/op     143546       1425
+schema_domain_name       RegexEndToEnd       51800  2323 ns/op       5382         57

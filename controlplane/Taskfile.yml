@@ -1,0 +1,83 @@
+version: '3'
+
+tasks:
+  default:
+    silent: true
+    desc: List available tasks
+    cmds:
+      - task --list
+
+  tidy:
+    desc: Tidy Go module dependencies
+    cmds:
+      - go mod tidy
+
+  test:
+    desc: Run all Go tests
+    cmds:
+      - go test ./...
+
+  build:
+    desc: Build the controlplane CLI
+    cmds:
+      - go build ./cmd/controlplane
+
+  format:
+    desc: Format Go files and check whitespace style
+    preconditions:
+      - sh: command -v gocondense >/dev/null 2>&1
+        msg: |
+             gocondense is required for the format task but was not found on PATH
+             go install github.com/abemedia/gocondense/cmd/gocondense@latest
+      - sh: command -v wsl >/dev/null 2>&1
+        msg: |
+            wsl is required for the format task but was not found on PATH
+            go install github.com/bombsimon/wsl/v5/cmd/wsl@latest
+    cmds:
+      - gocondense ./...
+      - wsl -fix ./...
+
+  demo:
+    desc: Run the end-to-end demonstration
+    cmds:
+      - go run ./cmd/controlplane demo
+
+  serve:
+    desc: Start the embedded NATS server with JetStream
+    cmds:
+      - go run ./cmd/controlplane serve -store ./data
+
+  register:
+    desc: Register the VirtualMachine CUE schema
+    cmds:
+      - go run ./cmd/controlplane register -file schemas/virtual-machine.cue
+
+  create:
+    desc: Create the example VirtualMachine resource
+    cmds:
+      - go run ./cmd/controlplane create -file examples/vm-01.json
+
+  patch:
+    desc: Patch the example VirtualMachine resource
+    cmds:
+      - go run ./cmd/controlplane patch -kind VirtualMachine -name vm-01 -file examples/vm-01-patch.json
+
+  get:
+    desc: Get the example VirtualMachine resource
+    cmds:
+      - go run ./cmd/controlplane get -kind VirtualMachine -name vm-01
+
+  delete:
+    desc: Delete the example VirtualMachine resource
+    cmds:
+      - go run ./cmd/controlplane delete -kind VirtualMachine -name vm-01
+
+  delete-kind:
+    desc: Remove the VirtualMachine schema from the registry
+    cmds:
+      - go run ./cmd/controlplane delete-kind -kind VirtualMachine
+
+  watch:
+    desc: Watch resource events with a durable consumer
+    cmds:
+      - go run ./cmd/controlplane watch -durable vm-controller
