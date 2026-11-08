@@ -68,6 +68,7 @@ var patternBenchmarks = []struct {
 func BenchmarkPatternMatching(b *testing.B) {
 	for _, test := range patternBenchmarks {
 		csl := test.csl
+
 		var err error
 		if csl == "" {
 			csl, err = RegexToPattern(test.regex)
@@ -101,13 +102,16 @@ func BenchmarkPatternMatching(b *testing.B) {
 		if matched, err := program.Match("Benchmark", test.value); err != nil || matched != want {
 			b.Fatalf("benchmark input %q matched pattern %q as %v, want %v (err=%v)", test.value, test.name, matched, want, err)
 		}
+
 		reusableMatcher := program.NewMatcher()
 		if matched, err := reusableMatcher.Match("Benchmark", test.value); err != nil || matched != want {
 			b.Fatalf("reusable matcher matched %q as %v, want %v (err=%v)", test.value, matched, want, err)
 		}
 
 		engine := "Interpreter"
+
 		var coldNFAStats nfaStats
+
 		switch program.definitions["Benchmark"].strategy {
 		case strategyDirect:
 			engine = "Direct"
@@ -119,9 +123,11 @@ func BenchmarkPatternMatching(b *testing.B) {
 
 		b.Run(fmt.Sprintf("%s/%s", engine, test.name), func(b *testing.B) {
 			b.ResetTimer()
+
 			for range b.N {
 				benchmarkMatchResult, _ = program.Match("Benchmark", test.value)
 			}
+
 			if engine == "NFA" {
 				b.ReportMetric(float64(coldNFAStats.closureVisits), "cold-closure/op")
 				b.ReportMetric(float64(coldNFAStats.activeStateVisits), "cold-active/op")
@@ -133,6 +139,7 @@ func BenchmarkPatternMatching(b *testing.B) {
 
 		b.Run(fmt.Sprintf("Regex/%s", test.name), func(b *testing.B) {
 			b.ResetTimer()
+
 			for range b.N {
 				benchmarkMatchResult = compiledRegex.MatchString(test.value)
 			}
@@ -140,6 +147,7 @@ func BenchmarkPatternMatching(b *testing.B) {
 
 		b.Run(fmt.Sprintf("Reuse/%s", test.name), func(b *testing.B) {
 			b.ResetTimer()
+
 			for range b.N {
 				benchmarkMatchResult, _ = reusableMatcher.Match("Benchmark", test.value)
 			}
@@ -162,21 +170,26 @@ func BenchmarkSchemaRegexPipeline(b *testing.B) {
 		if err != nil {
 			b.Fatalf("convert %s regex: %v", test.name, err)
 		}
+
 		source := "pattern SchemaPattern { " + expression + " }"
+
 		program, err := Compile(source)
 		if err != nil {
 			b.Fatalf("compile converted %s pattern: %v", test.name, err)
 		}
+
 		compiledRegex, err := regexp.Compile(`\A(?:` + test.regex + `)\z`)
 		if err != nil {
 			b.Fatalf("compile %s regex: %v", test.name, err)
 		}
+
 		if matched, err := program.Match("SchemaPattern", test.value); err != nil || !matched || !compiledRegex.MatchString(test.value) {
 			b.Fatalf("schema pattern preflight failed for %s: matched=%v err=%v", test.name, matched, err)
 		}
 
 		b.Run(test.name+"/CSLConvert", func(b *testing.B) {
 			b.ReportAllocs()
+
 			for range b.N {
 				benchmarkStringResult, _ = RegexToPattern(test.regex)
 			}
@@ -184,6 +197,7 @@ func BenchmarkSchemaRegexPipeline(b *testing.B) {
 
 		b.Run(test.name+"/CSLCompile", func(b *testing.B) {
 			b.ReportAllocs()
+
 			for range b.N {
 				benchmarkProgramResult, _ = Compile(source)
 			}
@@ -191,6 +205,7 @@ func BenchmarkSchemaRegexPipeline(b *testing.B) {
 
 		b.Run(test.name+"/RegexCompile", func(b *testing.B) {
 			b.ReportAllocs()
+
 			for range b.N {
 				benchmarkRegexResult, _ = regexp.Compile(`\A(?:` + test.regex + `)\z`)
 			}
@@ -198,6 +213,7 @@ func BenchmarkSchemaRegexPipeline(b *testing.B) {
 
 		b.Run(test.name+"/CSLMatch", func(b *testing.B) {
 			b.ReportAllocs()
+
 			for range b.N {
 				benchmarkMatchResult, _ = program.Match("SchemaPattern", test.value)
 			}
@@ -205,6 +221,7 @@ func BenchmarkSchemaRegexPipeline(b *testing.B) {
 
 		b.Run(test.name+"/RegexMatch", func(b *testing.B) {
 			b.ReportAllocs()
+
 			for range b.N {
 				benchmarkMatchResult = compiledRegex.MatchString(test.value)
 			}
@@ -212,26 +229,31 @@ func BenchmarkSchemaRegexPipeline(b *testing.B) {
 
 		b.Run(test.name+"/CSLEndToEnd", func(b *testing.B) {
 			b.ReportAllocs()
+
 			for range b.N {
 				converted, conversionErr := RegexToPattern(test.regex)
 				if conversionErr != nil {
 					b.Fatal(conversionErr)
 				}
+
 				compiled, compileErr := Compile("pattern SchemaPattern { " + converted + " }")
 				if compileErr != nil {
 					b.Fatal(compileErr)
 				}
+
 				benchmarkMatchResult, _ = compiled.Match("SchemaPattern", test.value)
 			}
 		})
 
 		b.Run(test.name+"/RegexEndToEnd", func(b *testing.B) {
 			b.ReportAllocs()
+
 			for range b.N {
 				compiled, compileErr := regexp.Compile(`\A(?:` + test.regex + `)\z`)
 				if compileErr != nil {
 					b.Fatal(compileErr)
 				}
+
 				benchmarkMatchResult = compiled.MatchString(test.value)
 			}
 		})

@@ -79,6 +79,7 @@ func compileDirectLiteralChoice(root *node) (*directLiteralChoice, bool) {
 	for root.kind == nodeReference && root.target != nil {
 		root = root.target
 	}
+
 	if root.kind != nodeAlternative {
 		return nil, false
 	}
@@ -93,6 +94,7 @@ func compileDirectLiteralChoice(root *node) (*directLiteralChoice, bool) {
 		if len(word) < prefixLength {
 			prefixLength = len(word)
 		}
+
 		for i := 0; i < prefixLength; i++ {
 			if word[i] != words[0][i] {
 				prefixLength = i
@@ -109,6 +111,7 @@ func compileDirectLiteralChoice(root *node) (*directLiteralChoice, bool) {
 	for i, word := range words {
 		choice.suffixes[i] = string(word[prefixLength:])
 	}
+
 	for i, suffix := range choice.suffixes {
 		for j, other := range choice.suffixes {
 			if i != j && len(suffix) < len(other) && strings.HasPrefix(other, suffix) {
@@ -153,6 +156,7 @@ func (c *directLiteralChoice) matchPrefix(input string) (int, bool) {
 
 func compileDirectSequence(root *node) (*directSequence, bool) {
 	plan := &directSequence{}
+
 	hasSpecial := false
 	if !appendDirectSequenceParts(root, plan, &hasSpecial) || !hasSpecial || len(plan.parts) > 128 {
 		return nil, false
@@ -171,6 +175,7 @@ func appendDirectSequenceParts(n *node, plan *directSequence, hasSpecial *bool) 
 				return false
 			}
 		}
+
 		return true
 	case nodeLiteral:
 		plan.parts = append(plan.parts, directSequencePart{literal: n.literalRunes})
@@ -179,26 +184,34 @@ func appendDirectSequenceParts(n *node, plan *directSequence, hasSpecial *bool) 
 		if isBuiltinPattern(n.text) {
 			return false
 		}
+
 		plan.parts = append(plan.parts, directSequencePart{builtin: n.text})
+
 		return true
 	case nodeAlternative:
 		choice, ok := compileDirectLiteralChoice(n)
 		if !ok {
 			return false
 		}
+
 		*hasSpecial = true
+
 		plan.parts = append(plan.parts, directSequencePart{choice: choice})
+
 		return true
 	case nodeRepeat:
 		if !isSingleRuneMatcher(n.children[0]) {
 			return false
 		}
+
 		*hasSpecial = true
+
 		plan.parts = append(plan.parts, directSequencePart{
 			repeatChild: n.children[0],
 			repeatMin:   n.min,
 			repeatMax:   n.max,
 		})
+
 		return true
 	default:
 		return false
@@ -219,12 +232,14 @@ func (p *directSequence) matchesFrom(index int, input string) bool {
 		if !strings.HasPrefix(input, part.choice.prefix) {
 			return false
 		}
+
 		remainder := input[len(part.choice.prefix):]
 		for _, suffix := range part.choice.suffixes {
 			if strings.HasPrefix(remainder, suffix) && p.matchesFrom(index+1, remainder[len(suffix):]) {
 				return true
 			}
 		}
+
 		return false
 	}
 
@@ -233,26 +248,32 @@ func (p *directSequence) matchesFrom(index int, input string) bool {
 		if part.repeatMax >= 0 && part.repeatMax < maxCount {
 			maxCount = part.repeatMax
 		}
+
 		count, bytesConsumed := 0, 0
 		for count < maxCount && bytesConsumed < len(input) {
 			r, size := utf8.DecodeRuneInString(input[bytesConsumed:])
 			if !matchesSingleRune(part.repeatChild, r) {
 				break
 			}
+
 			count++
 			bytesConsumed += size
 		}
+
 		for count >= part.repeatMin {
 			if p.matchesFrom(index+1, input[bytesConsumed:]) {
 				return true
 			}
+
 			if count == part.repeatMin {
 				break
 			}
+
 			_, size := utf8.DecodeLastRuneInString(input[:bytesConsumed])
 			bytesConsumed -= size
 			count--
 		}
+
 		return false
 	}
 
@@ -260,7 +281,9 @@ func (p *directSequence) matchesFrom(index int, input string) bool {
 		if len(input) == 0 {
 			return false
 		}
+
 		r, size := utf8.DecodeRuneInString(input)
+
 		return builtinMatches(part.builtin, r) && p.matchesFrom(index+1, input[size:])
 	}
 
@@ -268,12 +291,15 @@ func (p *directSequence) matchesFrom(index int, input string) bool {
 		if len(input) == 0 {
 			return false
 		}
+
 		actual, size := utf8.DecodeRuneInString(input)
 		if actual != expected {
 			return false
 		}
+
 		input = input[size:]
 	}
+
 	return p.matchesFrom(index+1, input)
 }
 
@@ -312,6 +338,7 @@ func isDirectExpression(n *node, root bool) bool {
 	if n.kind == nodeReference {
 		return n.target != nil && isDirectExpression(n.target, root)
 	}
+
 	if root && n.kind == nodeRepeat {
 		return isSingleRuneMatcher(n.children[0])
 	}
@@ -327,6 +354,7 @@ func isDirectExpression(n *node, root bool) bool {
 				return false
 			}
 		}
+
 		return true
 	default:
 		return false
@@ -335,10 +363,12 @@ func isDirectExpression(n *node, root bool) bool {
 
 func compileNFA(root *node) (*nfaProgram, bool) {
 	builder := nfaBuilder{}
+
 	fragment, ok := builder.compile(root)
 	if !ok {
 		return nil, false
 	}
+
 	for i := range builder.states {
 		sort.Slice(builder.states[i].literalTransitions, func(a, b int) bool {
 			return builder.states[i].literalTransitions[a].literal < builder.states[i].literalTransitions[b].literal
@@ -355,6 +385,7 @@ func (b *nfaBuilder) newState() (int, bool) {
 
 	id := len(b.states)
 	b.states = append(b.states, nfaState{})
+
 	return id, true
 }
 
@@ -369,65 +400,82 @@ func (b *nfaBuilder) compile(n *node) (nfaFragment, bool) {
 		if !ok {
 			return nfaFragment{}, false
 		}
+
 		current := start
+
 		for _, r := range n.literalRunes {
 			next, ok := b.newState()
 			if !ok {
 				return nfaFragment{}, false
 			}
+
 			b.states[current].literalTransitions = append(b.states[current].literalTransitions, nfaTransition{target: next, literal: r})
 			current = next
 		}
+
 		return nfaFragment{start: start, accept: current}, true
 	case nodeBuiltin:
 		if isBuiltinPattern(n.text) {
 			return nfaFragment{}, false
 		}
+
 		start, ok := b.newState()
 		if !ok {
 			return nfaFragment{}, false
 		}
+
 		accept, ok := b.newState()
 		if !ok {
 			return nfaFragment{}, false
 		}
+
 		b.states[start].builtinTransitions = append(b.states[start].builtinTransitions, nfaTransition{target: accept, builtin: n.text})
+
 		return nfaFragment{start: start, accept: accept}, true
 	case nodeReference:
 		if n.target == nil {
 			return nfaFragment{}, false
 		}
+
 		return b.compile(n.target)
 	case nodeSequence:
 		if len(n.children) == 0 {
 			return nfaFragment{}, false
 		}
+
 		fragment, ok := b.compile(n.children[0])
 		if !ok {
 			return nfaFragment{}, false
 		}
+
 		for _, child := range n.children[1:] {
 			next, ok := b.compile(child)
 			if !ok {
 				return nfaFragment{}, false
 			}
+
 			b.addEpsilon(fragment.accept, next.start)
 			fragment.accept = next.accept
 		}
+
 		return fragment, true
 	case nodeAlternative:
 		if words, ok := collectLiteralWords(n); ok && len(words) > 1 {
 			return b.compileLiteralTrie(words)
 		}
+
 		start, ok := b.newState()
 		if !ok {
 			return nfaFragment{}, false
 		}
+
 		accept, ok := b.newState()
 		if !ok {
 			return nfaFragment{}, false
 		}
+
 		literalWords := make([][]rune, 0)
+
 		otherChildren := make([]*node, 0, len(n.children))
 		for _, child := range n.children {
 			words, ok := collectLiteralWords(child)
@@ -435,67 +483,84 @@ func (b *nfaBuilder) compile(n *node) (nfaFragment, bool) {
 				otherChildren = append(otherChildren, child)
 				continue
 			}
+
 			literalWords = append(literalWords, words...)
 		}
+
 		if len(literalWords) > 0 {
 			trie, ok := b.compileLiteralTrie(literalWords)
 			if !ok {
 				return nfaFragment{}, false
 			}
+
 			b.addEpsilon(start, trie.start)
 			b.addEpsilon(trie.accept, accept)
 		}
+
 		for _, child := range otherChildren {
 			fragment, ok := b.compile(child)
 			if !ok {
 				return nfaFragment{}, false
 			}
+
 			b.addEpsilon(start, fragment.start)
 			b.addEpsilon(fragment.accept, accept)
 		}
+
 		return nfaFragment{start: start, accept: accept}, true
 	case nodeRepeat:
 		start, ok := b.newState()
 		if !ok {
 			return nfaFragment{}, false
 		}
+
 		current := start
+
 		for count := 0; count < n.min; count++ {
 			fragment, ok := b.compile(n.children[0])
 			if !ok {
 				return nfaFragment{}, false
 			}
+
 			b.addEpsilon(current, fragment.start)
 			current = fragment.accept
 		}
+
 		if n.max < 0 {
 			accept, ok := b.newState()
 			if !ok {
 				return nfaFragment{}, false
 			}
+
 			fragment, ok := b.compile(n.children[0])
 			if !ok {
 				return nfaFragment{}, false
 			}
+
 			b.addEpsilon(current, accept)
 			b.addEpsilon(current, fragment.start)
 			b.addEpsilon(fragment.accept, current)
+
 			return nfaFragment{start: start, accept: accept}, true
 		}
+
 		for count := n.min; count < n.max; count++ {
 			next, ok := b.newState()
 			if !ok {
 				return nfaFragment{}, false
 			}
+
 			fragment, ok := b.compile(n.children[0])
 			if !ok {
 				return nfaFragment{}, false
 			}
+
 			b.addEpsilon(current, next)
 			b.addEpsilon(current, fragment.start)
 			b.addEpsilon(fragment.accept, next)
 			current = next
 		}
+
 		return nfaFragment{start: start, accept: current}, true
 	default:
 		return nfaFragment{}, false
@@ -510,6 +575,7 @@ func collectLiteralWords(n *node) ([][]rune, bool) {
 		if n.target == nil {
 			return nil, false
 		}
+
 		return collectLiteralWords(n.target)
 	case nodeAlternative:
 		words := make([][]rune, 0, len(n.children))
@@ -518,16 +584,20 @@ func collectLiteralWords(n *node) ([][]rune, bool) {
 			if !ok || len(words)+len(childWords) > maxLiteralAlternatives {
 				return nil, false
 			}
+
 			words = append(words, childWords...)
 		}
+
 		return words, len(words) > 0
 	case nodeSequence:
 		words := [][]rune{{}}
+
 		for _, child := range n.children {
 			childWords, ok := collectLiteralWords(child)
 			if !ok || len(words)*len(childWords) > maxLiteralAlternatives {
 				return nil, false
 			}
+
 			combined := make([][]rune, 0, len(words)*len(childWords))
 			for _, prefix := range words {
 				for _, suffix := range childWords {
@@ -537,8 +607,10 @@ func collectLiteralWords(n *node) ([][]rune, bool) {
 					combined = append(combined, word)
 				}
 			}
+
 			words = combined
 		}
+
 		return words, len(words) > 0
 	default:
 		return nil, false
@@ -549,6 +621,7 @@ func compileFixedLiteralRepeat(root *node) (*fixedLiteralRepeat, bool) {
 	for root.kind == nodeReference && root.target != nil {
 		root = root.target
 	}
+
 	if root.kind != nodeRepeat || isSingleRuneMatcher(root.children[0]) {
 		return nil, false
 	}
@@ -557,6 +630,7 @@ func compileFixedLiteralRepeat(root *node) (*fixedLiteralRepeat, bool) {
 	if !ok || len(words) == 0 || len(words[0]) == 0 {
 		return nil, false
 	}
+
 	width := len(words[0])
 	for _, word := range words[1:] {
 		if len(word) != width {
@@ -575,28 +649,35 @@ func (p *fixedLiteralRepeat) matches(input string) bool {
 		}
 
 		matched := false
+
 		for _, word := range p.words {
 			remainder := input
 			wordMatches := true
+
 			for _, expected := range word {
 				if len(remainder) == 0 {
 					wordMatches = false
 					break
 				}
+
 				actual, size := utf8.DecodeRuneInString(remainder)
 				if actual != expected {
 					wordMatches = false
 					break
 				}
+
 				remainder = remainder[size:]
 			}
+
 			if wordMatches {
 				input = remainder
 				count++
 				matched = true
+
 				break
 			}
 		}
+
 		if !matched {
 			return false
 		}
@@ -618,11 +699,14 @@ func (b *nfaBuilder) compileLiteralTrie(words [][]rune) (nfaFragment, bool) {
 			if current.children == nil {
 				current.children = make(map[rune]*literalTrieNode)
 			}
+
 			if current.children[r] == nil {
 				current.children[r] = &literalTrieNode{}
 			}
+
 			current = current.children[r]
 		}
+
 		current.terminal = true
 	}
 
@@ -630,13 +714,16 @@ func (b *nfaBuilder) compileLiteralTrie(words [][]rune) (nfaFragment, bool) {
 	if !ok {
 		return nfaFragment{}, false
 	}
+
 	accept, ok := b.newState()
 	if !ok {
 		return nfaFragment{}, false
 	}
+
 	if !b.compileTrieNode(root, start, accept) {
 		return nfaFragment{}, false
 	}
+
 	return nfaFragment{start: start, accept: accept}, true
 }
 
@@ -649,17 +736,21 @@ func (b *nfaBuilder) compileTrieNode(node *literalTrieNode, state, accept int) b
 	for r := range node.children {
 		runes = append(runes, r)
 	}
+
 	sort.Slice(runes, func(i, j int) bool { return runes[i] < runes[j] })
+
 	for _, r := range runes {
 		next, ok := b.newState()
 		if !ok {
 			return false
 		}
+
 		b.states[state].literalTransitions = append(b.states[state].literalTransitions, nfaTransition{target: next, literal: r})
 		if !b.compileTrieNode(node.children[r], next, accept) {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -669,12 +760,14 @@ func (s *nfaState) literalTarget(r rune) (int, bool, int) {
 		if transitions[0].literal == r {
 			return transitions[0].target, true, 1
 		}
+
 		return 0, false, 1
 	}
 
 	low, high, checks := 0, len(transitions), 0
 	for low < high {
 		checks++
+
 		mid := low + (high-low)/2
 		if transitions[mid].literal < r {
 			low = mid + 1
@@ -682,13 +775,16 @@ func (s *nfaState) literalTarget(r rune) (int, bool, int) {
 			high = mid
 		}
 	}
+
 	index := low
 	if index < len(transitions) {
 		checks++
 	}
+
 	if index < len(transitions) && transitions[index].literal == r {
 		return transitions[index].target, true, checks
 	}
+
 	return 0, false, checks
 }
 
@@ -701,23 +797,28 @@ func (w *nfaWorkspace) match(program *nfaProgram, input string) bool {
 	if w.stats != nil {
 		*w.stats = nfaStats{}
 	}
+
 	w.prepareCache(program)
+
 	stateCount := len(program.states)
 	if cap(w.seen) < stateCount {
 		w.seen = make([]uint32, stateCount)
 	} else {
 		w.seen = w.seen[:stateCount]
 	}
+
 	if cap(w.active) < stateCount {
 		w.active = make([]int, 0, stateCount)
 	} else {
 		w.active = w.active[:0]
 	}
+
 	if cap(w.next) < stateCount {
 		w.next = make([]int, 0, stateCount)
 	} else {
 		w.next = w.next[:0]
 	}
+
 	if cap(w.stack) < stateCount {
 		w.stack = make([]int, 0, stateCount)
 	} else {
@@ -729,6 +830,7 @@ func (w *nfaWorkspace) match(program *nfaProgram, input string) bool {
 	w.addClosure(program, program.start, &w.active)
 	active := w.active
 	currentState := w.startState
+
 	cacheable := w.startCached
 	if !cacheable {
 		currentState, cacheable = w.cacheState(active)
@@ -737,55 +839,68 @@ func (w *nfaWorkspace) match(program *nfaProgram, input string) bool {
 			w.startCached = true
 		}
 	}
+
 	for len(input) > 0 {
 		r, size := utf8.DecodeRuneInString(input)
+
 		key := dfaTransitionKey{state: currentState, r: r}
 		if cacheable {
 			if nextState, ok := w.transitions[key]; ok {
 				if w.stats != nil {
 					w.stats.dfaHits++
 				}
+
 				if nextState < 0 {
 					return false
 				}
+
 				currentState = nextState
 				active = w.stateSets[currentState]
 				input = input[size:]
+
 				continue
 			}
 		}
+
 		if w.stats != nil {
 			w.stats.dfaMisses++
 		}
 
 		w.nextGeneration()
+
 		w.next = w.next[:0]
 		for _, stateID := range active {
 			if w.stats != nil {
 				w.stats.activeStateVisits++
 			}
+
 			state := &program.states[stateID]
 			if target, ok, checks := state.literalTarget(r); ok {
 				w.addClosure(program, target, &w.next)
+
 				if w.stats != nil {
 					w.stats.transitionChecks += checks
 				}
 			} else if w.stats != nil {
 				w.stats.transitionChecks += checks
 			}
+
 			for _, transition := range state.builtinTransitions {
 				if w.stats != nil {
 					w.stats.transitionChecks++
 				}
+
 				if transition.matches(r) {
 					w.addClosure(program, transition.target, &w.next)
 				}
 			}
 		}
+
 		if len(w.next) == 0 {
 			if cacheable {
 				w.cacheTransition(key, -1)
 			}
+
 			return false
 		}
 
@@ -794,9 +909,12 @@ func (w *nfaWorkspace) match(program *nfaProgram, input string) bool {
 				currentState = nextState
 				active = w.stateSets[currentState]
 				input = input[size:]
+
 				continue
 			}
+
 			cacheable = false
+
 			if w.stats != nil {
 				w.stats.dfaFallbacks++
 			}
@@ -812,6 +930,7 @@ func (w *nfaWorkspace) match(program *nfaProgram, input string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -839,10 +958,12 @@ func (w *nfaWorkspace) cacheState(states []int) (int, bool) {
 	for _, state := range states {
 		keyBytes[state/8] |= 1 << (state % 8)
 	}
+
 	key := string(keyBytes)
 	if state, ok := w.stateIDs[key]; ok {
 		return state, true
 	}
+
 	if len(w.stateSets) >= maxDFAStates || w.stateEntries+len(states) > maxDFAStateSetEntries {
 		w.cacheFull = true
 		return 0, false
@@ -852,6 +973,7 @@ func (w *nfaWorkspace) cacheState(states []int) (int, bool) {
 	w.stateIDs[key] = state
 	w.stateSets = append(w.stateSets, append([]int(nil), states...))
 	w.stateEntries += len(states)
+
 	return state, true
 }
 
@@ -859,12 +981,14 @@ func (w *nfaWorkspace) cacheTransition(key dfaTransitionKey, target int) bool {
 	if _, exists := w.transitions[key]; exists {
 		return true
 	}
+
 	if w.cacheFull || len(w.transitions) >= maxDFATransitions {
 		w.cacheFull = true
 		return false
 	}
 
 	w.transitions[key] = target
+
 	return true
 }
 
@@ -873,13 +997,16 @@ func (w *nfaWorkspace) addClosure(program *nfaProgram, stateID int, active *[]in
 	for len(w.stack) > 0 {
 		last := len(w.stack) - 1
 		current := w.stack[last]
+
 		w.stack = w.stack[:last]
 		if w.seen[current] == w.generation {
 			continue
 		}
+
 		if w.stats != nil {
 			w.stats.closureVisits++
 		}
+
 		w.seen[current] = w.generation
 		*active = append(*active, current)
 		w.stack = append(w.stack, program.states[current].epsilon...)
@@ -898,5 +1025,6 @@ func (t nfaTransition) matches(r rune) bool {
 	if t.builtin != "" {
 		return builtinMatches(t.builtin, r)
 	}
+
 	return t.literal == r
 }

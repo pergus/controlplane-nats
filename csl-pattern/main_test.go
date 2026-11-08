@@ -234,6 +234,7 @@ pattern Repeated { repeat ("a" | "b") 1 to 5 }
 		allocations := testing.AllocsPerRun(100, func() {
 			matched, err := program.Match(test.pattern, test.value)
 			allocationMatchResult = matched
+
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -251,6 +252,7 @@ func TestReusableMatcherAcrossInputs(t *testing.T) {
 	}
 
 	matcher := program.NewMatcher()
+
 	cases := []struct {
 		value string
 		want  bool
@@ -275,6 +277,7 @@ func TestReusableMatcherAcrossInputs(t *testing.T) {
 	allocations := testing.AllocsPerRun(100, func() {
 		matched, err := matcher.Match("Code", "abc-ok")
 		allocationMatchResult = matched
+
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -323,6 +326,7 @@ pattern TooLarge { repeat ("xy" | digit) 0 to 4096 }
 	}
 
 	matcher := program.NewMatcher()
+
 	for _, value := range []string{"cat7", "dog123", "dog٣", "a7", "cat", "dog1234", "bird7"} {
 		want := regex.MatchString(value)
 		for _, match := range []func(string, string) (bool, error){program.Match, matcher.Match} {
@@ -330,6 +334,7 @@ pattern TooLarge { repeat ("xy" | digit) 0 to 4096 }
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			if got != want {
 				t.Errorf("Match(%q) = %v, regex oracle = %v", value, got, want)
 			}
@@ -340,6 +345,7 @@ pattern TooLarge { repeat ("xy" | digit) 0 to 4096 }
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	for _, value := range []string{"cat7", "car٣", "cab7", "cat"} {
 		want := prefixChoiceOracle.MatchString(value)
 		for _, match := range []func(string, string) (bool, error){program.Match, matcher.Match} {
@@ -347,6 +353,7 @@ pattern TooLarge { repeat ("xy" | digit) 0 to 4096 }
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			if got != want {
 				t.Errorf("PrefixChoice(%q) = %v, regex oracle = %v", value, got, want)
 			}
@@ -368,6 +375,7 @@ pattern TooLarge { repeat ("xy" | digit) 0 to 4096 }
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		if got != test.want {
 			t.Errorf("CompoundRepeat(%q) = %v, want %v", test.value, got, test.want)
 		}
@@ -382,20 +390,25 @@ func TestNFACacheAndFallback(t *testing.T) {
 
 	machine := program.definitions["Choice"].nfa
 	stats := &nfaStats{}
+
 	workspace := nfaWorkspace{stats: stats}
 	for index, value := range []string{"ab7", "a2", "ax1", "ab7"} {
 		got := workspace.match(machine, value)
+
 		want := value == "ab7" || value == "a2"
 		if got != want {
 			t.Errorf("NFA match %q = %v, want %v", value, got, want)
 		}
+
 		if index == 0 && (stats.closureVisits == 0 || stats.activeStateVisits == 0 || stats.transitionChecks == 0 || stats.dfaMisses == 0) {
 			t.Fatal("cold NFA work counters were not populated")
 		}
 	}
+
 	if len(workspace.transitions) == 0 {
 		t.Fatal("NFA did not cache any transitions")
 	}
+
 	if stats.dfaHits == 0 {
 		t.Fatal("repeated NFA input did not hit the transition cache")
 	}
@@ -404,6 +417,7 @@ func TestNFACacheAndFallback(t *testing.T) {
 	if !workspace.match(machine, "ab3") {
 		t.Fatal("NFA fallback rejected a valid input")
 	}
+
 	if stats.dfaFallbacks == 0 {
 		t.Fatal("NFA fallback counter was not incremented")
 	}
@@ -596,6 +610,7 @@ func TestEmailRegexConversion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if generatedUnicodeMatch {
 		t.Error("generated ASCII regex pattern unexpectedly matched Unicode email characters")
 	}
@@ -604,6 +619,7 @@ func TestEmailRegexConversion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !handwrittenUnicodeMatch {
 		t.Error("hand-written Unicode-aware CSL pattern rejected Unicode email characters")
 	}

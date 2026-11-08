@@ -280,6 +280,7 @@ func (p *parser) expect(kind tokenKind, text string) (token, error) {
 // makeNode allocates a syntax node with a unique parser-local ID.
 func (p *parser) makeNode(kind nodeKind, text string, children ...*node) *node {
 	p.nextID++
+
 	n := &node{id: p.nextID, kind: kind, text: text, children: children}
 	if kind == nodeLiteral {
 		n.literalRunes = []rune(text)
@@ -633,6 +634,7 @@ func (m *matcher) retainable() bool {
 	if len(m.input) > 4096 || len(m.memo) > 8192 {
 		return false
 	}
+
 	capacity := 0
 	for _, buffer := range m.positionBuffers {
 		capacity += cap(buffer)
@@ -640,20 +642,24 @@ func (m *matcher) retainable() bool {
 			return false
 		}
 	}
+
 	for _, buffer := range m.boolBuffers {
 		capacity += cap(buffer)
 		if capacity > 16384 {
 			return false
 		}
 	}
+
 	capacity += cap(m.nfa.active) + cap(m.nfa.next) + cap(m.nfa.stack) + cap(m.nfa.seen)
 	if len(m.nfa.stateSets) > maxDFAStates || len(m.nfa.transitions) > maxDFATransitions || m.nfa.stateEntries > maxDFAStateSetEntries {
 		return false
 	}
+
 	capacity += m.nfa.stateEntries
 	if capacity > maxMatcherPoolScratch {
 		return false
 	}
+
 	return true
 }
 
@@ -688,6 +694,7 @@ func (m *matcher) matchReusable(n *node, pos int) []int {
 	case nodeLiteral:
 		if pos+len(n.literalRunes) <= len(m.input) {
 			matches := true
+
 			for i, r := range n.literalRunes {
 				if m.input[pos+i] != r {
 					matches = false
@@ -716,9 +723,11 @@ func (m *matcher) matchReusable(n *node, pos int) []int {
 	case nodeSequence:
 		positionsBuffer := m.takePositionBuffer(1)
 		positions := append(m.positionBuffers[positionsBuffer], pos)
+
 		m.positionBuffers[positionsBuffer] = positions
 		for _, child := range n.children {
 			nextBuffer := m.takePositionBuffer(len(positions))
+
 			next := m.positionBuffers[nextBuffer]
 			for _, current := range positions {
 				next = append(next, m.match(child, current)...)
@@ -727,6 +736,7 @@ func (m *matcher) matchReusable(n *node, pos int) []int {
 			positions = m.uniqueSortedPositions(next)
 			m.positionBuffers[nextBuffer] = positions
 			positionsBuffer = nextBuffer
+
 			if len(positions) == 0 {
 				break
 			}
@@ -750,16 +760,19 @@ func (m *matcher) matchOneShot(n *node, pos int) []int {
 	}
 
 	var result []int
+
 	switch n.kind {
 	case nodeLiteral:
 		if pos+len(n.literalRunes) <= len(m.input) {
 			matches := true
+
 			for i, r := range n.literalRunes {
 				if m.input[pos+i] != r {
 					matches = false
 					break
 				}
 			}
+
 			if matches {
 				result = []int{pos + len(n.literalRunes)}
 			}
@@ -777,6 +790,7 @@ func (m *matcher) matchOneShot(n *node, pos int) []int {
 		for _, child := range n.children {
 			positions = append(positions, m.match(child, pos)...)
 		}
+
 		result = m.uniqueSortedPositions(positions)
 	case nodeSequence:
 		positions := []int{pos}
@@ -785,17 +799,20 @@ func (m *matcher) matchOneShot(n *node, pos int) []int {
 			for _, current := range positions {
 				next = append(next, m.match(child, current)...)
 			}
+
 			positions = m.uniqueSortedPositions(next)
 			if len(positions) == 0 {
 				break
 			}
 		}
+
 		result = positions
 	case nodeRepeat:
 		result = m.matchRepeatOneShot(n, pos)
 	}
 
 	m.memo[key] = result
+
 	return result
 }
 
@@ -811,6 +828,7 @@ func (m *matcher) matchRepeatOneShot(n *node, pos int) []int {
 		for matched < maxCount && matchesSingleRune(child, m.input[pos+matched]) {
 			matched++
 		}
+
 		if matched < n.min {
 			return nil
 		}
@@ -824,6 +842,7 @@ func (m *matcher) matchRepeatOneShot(n *node, pos int) []int {
 	}
 
 	frontier := []int{pos}
+
 	accepted := make([]int, 0)
 	if n.min == 0 {
 		accepted = append(accepted, pos)
@@ -834,6 +853,7 @@ func (m *matcher) matchRepeatOneShot(n *node, pos int) []int {
 		if len(frontier) == 0 {
 			return accepted
 		}
+
 		if count == n.min {
 			accepted = append(accepted, frontier...)
 		}
@@ -845,8 +865,10 @@ func (m *matcher) matchRepeatOneShot(n *node, pos int) []int {
 			if len(frontier) == 0 {
 				break
 			}
+
 			accepted = append(accepted, frontier...)
 		}
+
 		return m.uniqueSortedPositions(accepted)
 	}
 
@@ -854,8 +876,10 @@ func (m *matcher) matchRepeatOneShot(n *node, pos int) []int {
 	for _, current := range frontier {
 		seen[current] = true
 	}
+
 	for {
 		next := m.advanceOneShot(child, frontier)
+
 		newFrontier := make([]int, 0, len(next))
 		for _, current := range next {
 			if !seen[current] {
@@ -864,9 +888,11 @@ func (m *matcher) matchRepeatOneShot(n *node, pos int) []int {
 				accepted = append(accepted, current)
 			}
 		}
+
 		if len(newFrontier) == 0 {
 			break
 		}
+
 		frontier = newFrontier
 	}
 
@@ -925,6 +951,7 @@ func (m *matcher) matchRepeatReusable(n *node, pos int) []int {
 
 		accepted = m.uniqueSortedPositions(accepted)
 		m.positionBuffers[acceptedBuffer] = accepted
+
 		return accepted
 	}
 
@@ -959,6 +986,7 @@ func (m *matcher) matchRepeatReusable(n *node, pos int) []int {
 
 	accepted = m.uniqueSortedPositions(accepted)
 	m.positionBuffers[acceptedBuffer] = accepted
+
 	return accepted
 }
 
@@ -1022,12 +1050,14 @@ func (m *matcher) matchSingleRuneRepeat(n *node, pos int) []int {
 	}
 
 	buffer := m.takePositionBuffer(matched - n.min + 1)
+
 	endpoints := m.positionBuffers[buffer]
 	for count := n.min; count <= matched; count++ {
 		endpoints = append(endpoints, pos+count)
 	}
 
 	m.positionBuffers[buffer] = endpoints
+
 	return endpoints
 }
 
@@ -1037,6 +1067,7 @@ func (m *matcher) uniqueSortedPositions(positions []int) []int {
 	}
 
 	sort.Ints(positions)
+
 	uniqueCount := 1
 	for i := 1; i < len(positions); i++ {
 		if positions[i] != positions[uniqueCount-1] {
@@ -1050,6 +1081,7 @@ func (m *matcher) uniqueSortedPositions(positions []int) []int {
 
 func (m *matcher) advance(child *node, frontier []int) []int {
 	buffer := m.takePositionBuffer(len(frontier))
+
 	next := m.positionBuffers[buffer]
 	for _, pos := range frontier {
 		next = append(next, m.match(child, pos)...)
@@ -1057,11 +1089,13 @@ func (m *matcher) advance(child *node, frontier []int) []int {
 
 	next = m.uniqueSortedPositions(next)
 	m.positionBuffers[buffer] = next
+
 	return next
 }
 
 func (m *matcher) takePositionBuffer(minCapacity int) int {
 	index := m.positionBufferUsed
+
 	m.positionBufferUsed++
 	if index == len(m.positionBuffers) {
 		m.positionBuffers = append(m.positionBuffers, make([]int, 0, minCapacity))
@@ -1076,6 +1110,7 @@ func (m *matcher) takePositionBuffer(minCapacity int) int {
 
 func (m *matcher) takeBoolBuffer(size int) []bool {
 	index := m.boolBufferUsed
+
 	m.boolBufferUsed++
 	if index == len(m.boolBuffers) {
 		m.boolBuffers = append(m.boolBuffers, make([]bool, size))
@@ -1244,17 +1279,21 @@ func Compile(source string) (*Program, error) {
 		if choice, supported := compileDirectLiteralChoice(definition.expr); supported {
 			definition.strategy = strategyDirect
 			definition.directChoice = choice
+
 			continue
 		}
 
 		if repeated, supported := compileFixedLiteralRepeat(definition.expr); supported {
 			definition.strategy = strategyDirect
 			definition.directRepeat = repeated
+
 			continue
 		}
+
 		if sequence, supported := compileDirectSequence(definition.expr); supported {
 			definition.strategy = strategyDirect
 			definition.directSequence = sequence
+
 			continue
 		}
 
@@ -1266,6 +1305,7 @@ func Compile(source string) (*Program, error) {
 		if machine, supported := compileNFA(definition.expr); supported {
 			definition.strategy = strategyNFA
 			definition.nfa = machine
+
 			continue
 		}
 
@@ -1276,6 +1316,7 @@ func Compile(source string) (*Program, error) {
 	program.matcherPool.New = func() any {
 		return &matcher{memo: make(map[matchKey][]int), reuseBuffers: true}
 	}
+
 	return program, nil
 }
 
@@ -1311,29 +1352,37 @@ func (p *Program) Match(name, value string) (bool, error) {
 		if d.directSequence != nil {
 			return d.directSequence.matches(value), nil
 		}
+
 		if d.directChoice != nil {
 			return d.directChoice.matches(value), nil
 		}
+
 		if d.directRepeat != nil {
 			return d.directRepeat.matches(value), nil
 		}
+
 		matched, _ := matchSimple(d.expr, value)
+
 		return matched, nil
 	case strategyNFA:
 		m := p.matcherPool.Get().(*matcher)
+
 		matched := m.nfa.match(d.nfa, value)
 		if m.retainable() {
 			p.matcherPool.Put(m)
 		}
+
 		return matched, nil
 	}
 
 	m := p.matcherPool.Get().(*matcher)
 	m.reset(value)
+
 	matched := m.matchDefinition(d)
 	if m.retainable() {
 		p.matcherPool.Put(m)
 	}
+
 	return matched, nil
 }
 
@@ -1353,19 +1402,24 @@ func (m *Matcher) Match(name, value string) (bool, error) {
 		if d.directSequence != nil {
 			return d.directSequence.matches(value), nil
 		}
+
 		if d.directChoice != nil {
 			return d.directChoice.matches(value), nil
 		}
+
 		if d.directRepeat != nil {
 			return d.directRepeat.matches(value), nil
 		}
+
 		matched, _ := matchSimple(d.expr, value)
+
 		return matched, nil
 	case strategyNFA:
 		return m.state.nfa.match(d.nfa, value), nil
 	}
 
 	m.state.reset(value)
+
 	return m.state.matchDefinition(d), nil
 }
 
@@ -1388,19 +1442,23 @@ func matchSimple(n *node, input string) (bool, bool) {
 	if root.kind == nodeAlternative {
 		for _, branch := range root.children {
 			pos := 0
+
 			matched, supported := matchSimpleNode(branch, input, &pos)
 			if !supported {
 				return false, false
 			}
+
 			if matched && pos == len(input) {
 				return true, true
 			}
 		}
+
 		return false, true
 	}
 
 	if root.kind == nodeRepeat && isSingleRuneMatcher(root.children[0]) {
 		count := 0
+
 		for len(input) > 0 {
 			r, size := utf8.DecodeRuneInString(input)
 			if !matchesSingleRune(root.children[0], r) || root.max >= 0 && count == root.max {
@@ -1416,6 +1474,7 @@ func matchSimple(n *node, input string) (bool, bool) {
 
 	pos := 0
 	matched, supported := matchSimpleNode(n, input, &pos)
+
 	return matched && pos == len(input), supported
 }
 
@@ -1447,6 +1506,7 @@ func matchSimpleNode(n *node, input string, pos *int) (bool, bool) {
 		}
 
 		*pos += size
+
 		return true, true
 	case nodeReference:
 		return matchSimpleNode(n.target, input, pos)
