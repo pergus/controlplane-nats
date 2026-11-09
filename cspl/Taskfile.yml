@@ -14,19 +14,19 @@ tasks:
       - go test ./...
 
   build:
-    desc: Build the csl-pattern CLI
+    desc: Build the cspl-pattern CLI
     cmds:
-      - go build -o csl-pattern .
+      - go build -o cspl-pattern .
 
   run:
-    desc: List patterns from email.csl
+    desc: List patterns from email.cspl
     cmds:
-      - go run . -file email.csl -list
+      - go run . -file email.cspl -list
 
   generate-email:
-    desc: Generate a CSL definition from email.regex
+    desc: Generate a CSPL definition from email.regex
     cmds:
-      - go run . -regex-file email.regex -name EmailAddress > generated-email.csl
+      - go run . -regex-file email.regex -name EmailAddress > generated-email.cspl
 
   benchmark:
     desc: Compare match strategies across pattern structures and input cases

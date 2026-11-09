@@ -1,10 +1,11 @@
-# CSL Pattern Prototype
+# CSPL Pattern Prototype
 
-A small, dependency-free Go prototype for the proposed CSL string-pattern notation.
+A small, dependency-free Go prototype for the proposed Controlplane String Pattern Language (CSPL).
+
+See the [CSPL v0.1 specification](../specifications/string-pattern/cspl-v0.1.md) for the language definition.
 
 ## Implemented syntax
 
-- `type Name = expression`
 - `pattern Name { expression }`
 - Implicit concatenation: `A B`
 - Alternatives: `A | B`
@@ -13,35 +14,36 @@ A small, dependency-free Go prototype for the proposed CSL string-pattern notati
 - `unlimited` as the maximum repetition bound
 - `optional expression`
 - Quoted string literals, with `\"`, `\\`, `\n`, `\r`, and `\t` escapes
-- Named type/pattern references
+- Line comments that start with `;` and continue to the end of the line
+- Named pattern references
 - Full-string matching (the entire input must match)
-- `RegexToPattern`, which translates supported Go regular expressions into CSL expressions
+- `RegexToPattern`, which translates supported Go regular expressions into CSPL expressions
 
 The repetition operand is one atom. Use parentheses to repeat a compound expression:
 
-```csl
+```cspl
 repeat (letters | digits) 1 to 8
 ```
 
-The `type` and `pattern` declarations currently compile to the same pattern expression representation. The distinction is retained in the source grammar for future CSL type-system work.
+Patterns can reference other named patterns. Forward references are allowed, but recursive definitions are rejected.
 
 ## Convert an email regular expression
 
-The [email.regex](email.regex) example uses a common ASCII email-address shape. Convert it to a complete CSL definition with:
+The [email.regex](email.regex) example uses a common ASCII email-address shape. Convert it to a complete CSPL definition with:
 
 ```sh
-go run . -regex-file email.regex -name EmailAddress > generated-email.csl
+go run . -regex-file email.regex -name EmailAddress > generated-email.cspl
 ```
 
-Inspect the generated definition, then test the same address against it and the hand-written [email.csl](email.csl) pattern:
+Inspect the generated definition, then test the same address against it and the hand-written [email.cspl](email.cspl) pattern:
 
 ```sh
-cat generated-email.csl
-go run . -file generated-email.csl -pattern EmailAddress "john.doe@example.com"
-go run . -file email.csl -pattern EmailAddress "john.doe@example.com"
+cat generated-email.cspl
+go run . -file generated-email.cspl -pattern EmailAddress "john.doe@example.com"
+go run . -file email.cspl -pattern EmailAddress "john.doe@example.com"
 ```
 
-Both match the ASCII example address and print `valid`. `-name` is optional and defaults to `RegexPattern`. CSL matching consumes the full input, so `^` and `$` are optional. `RegexToPattern` preserves Go regex character-class semantics: `[A-Za-z0-9]` maps to the ASCII-only `ascii_letters` and `ascii_digits` atoms. The hand-written example uses Unicode-aware `letters` and `digits`, so it also accepts addresses such as `josé@例子.com`; the ASCII regex-derived pattern does not.
+Both match the ASCII example address and print `valid`. `-name` is optional and defaults to `RegexPattern`. CSPL matching consumes the full input, so `^` and `$` are optional. `RegexToPattern` preserves Go regex character-class semantics: `[A-Za-z0-9]` maps to the ASCII-only `ascii_letters` and `ascii_digits` atoms. The hand-written example uses Unicode-aware `letters` and `digits`, so it also accepts addresses such as `josé@例子.com`; the ASCII regex-derived pattern does not.
 
 The Go API is also available: `RegexToPattern` returns just the expression, while the CLI wraps it in a named definition.
 
@@ -73,7 +75,7 @@ For example, `pattern WebURL { URL }` matches `https://example.com/path`.
 
 ## Matcher selection and execution
 
-When a CSL definition is compiled, the compiler chooses the most suitable matcher for each pattern.
+When a CSPL definition is compiled, the compiler chooses the most suitable matcher for each pattern.
 
 - **Direct scans** are used for simple patterns, including literals, sequences of character atoms, top-level repetitions of single-rune matchers, pure literal alternatives, prefix-free literal choices within sequences, and fixed-width repetitions of literal alternatives.
 - **Shared-prefix tries** are used when literal-only alternatives appear inside more complex expressions. These tries share common prefixes and use indexed rune transitions.
@@ -98,9 +100,9 @@ task benchmark
 
 The suite compares four matching strategies:
 
-- Direct CSL matching
+- Direct CSPL matching
 - NFA matching
-- Reusable CSL matching
+- Reusable CSPL matching
 - Go's regular expression engine
 
 Patterns are compiled before the timed benchmark loops, so the main benchmark results measure matching performance rather than compilation time.
@@ -132,12 +134,12 @@ These counters are collected using a separate, instrumented single-match probe. 
 
 The final table measures the individual stages of converting and executing schema regular expressions:
 
-- `CSLConvert`: converts a regular expression into a CSL definition.
-- `CSLCompile`: compiles the resulting CSL definition.
+- `CSPLConvert`: converts a regular expression into a CSPL definition.
+- `CSPLCompile`: compiles the resulting CSPL definition.
 - `RegexCompile`: compiles the original regular expression using Go's regex engine.
-- `CSLMatch`: matches using an already-compiled CSL pattern.
+- `CSPLMatch`: matches using an already-compiled CSPL pattern.
 - `RegexMatch`: matches using an already-compiled Go regex.
-- `CSLEndToEnd`: measures the complete CSL conversion, compilation, and matching process.
+- `CSPLEndToEnd`: measures the complete CSPL conversion, compilation, and matching process.
 - `RegexEndToEnd`: measures the complete Go regex compilation and matching process.
 
 In a server application, conversion and compilation normally happen when a schema is registered, rather than for every resource being validated. Therefore, the match-only results represent the cost of validating individual resources, while the end-to-end results show the cost of processing a pattern from scratch.
@@ -165,7 +167,7 @@ Run the benchmark and generate both plots in one command:
 ./venv/bin/python plot.py
 ```
 
-This writes `csl_vs_regex_speed_ratio.png` and `csl_benchmark_latency.png` to the current directory. To plot a benchmark table without rerunning the benchmark, save its output and pass it to the script:
+This writes `cspl_vs_regex_speed_ratio.png` and `cspl_benchmark_latency.png` to the current directory. To plot a benchmark table without rerunning the benchmark, save its output and pass it to the script:
 
 ```sh
 task benchmark | tee benchmark.txt
@@ -175,28 +177,28 @@ task benchmark | tee benchmark.txt
 ## Run
 
 ```sh
-go run . -file email.csl -list
-go run . -file email.csl -pattern EmailAddress "john.doe@example.com"
+go run . -file email.cspl -list
+go run . -file email.cspl -pattern EmailAddress "john.doe@example.com"
 ```
 
 Or build:
 
 ```sh
-go build -o csl-pattern .
-./csl-pattern -file email.csl -pattern EmailAddress "john.doe@example.com"
+go build -o cspl-pattern .
+./cspl-pattern -file email.cspl -pattern EmailAddress "john.doe@example.com"
 ```
 
 The program prints `valid` or `invalid`. It exits with status 0 for valid, 1 for invalid, and 2 for usage or compilation errors.
 
 ## Limitations
 
-This is a pattern-language prototype, not a complete CSL implementation or a complete email validator.
+This is a pattern-language prototype, not a complete CSPL implementation or a complete email validator.
 
 - No Unicode normalization or IDNA/domain-name validation.
 - No RFC-complete email validation.
 - `RegexToPattern` supports literals, alternatives, concatenation, captures, repetition, bounded character classes, and absolute text anchors. Complete ASCII letter and digit ranges map to Unicode-aware built-ins. It returns an expression, not a complete named definition.
 - Regex word-boundary assertions, line-specific anchors, lookarounds, backreferences, empty character classes, and character classes larger than 512 runes are not supported by `RegexToPattern`.
-- The regex converter uses Go regular-expression syntax and targets CSL's full-string matching behavior.
+- The regex converter uses Go regular-expression syntax and targets CSPL's full-string matching behavior.
 - Recursive pattern definitions are rejected.
 - No source maps or detailed match-failure explanations yet.
 - No static proof that a pattern is satisfiable.

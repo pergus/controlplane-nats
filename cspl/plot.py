@@ -112,12 +112,12 @@ def make_plots(benchmark_data, output_dir):
 	ratios = ratios.loc[ratio_order]
 
 	output_dir.mkdir(parents=True, exist_ok=True)
-	ratio_path = output_dir / "csl_vs_regex_speed_ratio.png"
+	ratio_path = output_dir / "cspl_vs_regex_speed_ratio.png"
 	fig, ax = plt.subplots(figsize=(12, 10))
 	plot_grouped_bars(ax, ratios, engines, ENGINE_COLORS, 0.8 / len(engines))
 	ax.axvline(1, color="#333333", linestyle="--", linewidth=1)
 	ax.set_xlabel("Speed ratio (Regex time / engine time); above 1 is faster than Regex")
-	ax.set_title("Direct, NFA, and reusable CSL performance relative to Go Regex")
+	ax.set_title("Direct, NFA, and reusable CSPL performance relative to Go Regex")
 	ax.legend(loc="lower right")
 	fig.tight_layout()
 	fig.savefig(ratio_path, dpi=180, bbox_inches="tight")
@@ -126,7 +126,7 @@ def make_plots(benchmark_data, output_dir):
 	latency_engines = [engine for engine in ENGINE_ORDER if engine in latency]
 	latency_order = latency[latency_engines].min(axis=1).sort_values().index
 	latency_values = latency.loc[latency_order, latency_engines]
-	latency_path = output_dir / "csl_benchmark_latency.png"
+	latency_path = output_dir / "cspl_benchmark_latency.png"
 	fig, ax = plt.subplots(figsize=(12, 10))
 	plot_grouped_bars(ax, latency_values, latency_engines, ENGINE_COLORS, 0.8 / len(latency_engines))
 	ax.set_xscale("log")
@@ -150,7 +150,7 @@ def make_plots(benchmark_data, output_dir):
 
 
 def main():
-	parser = argparse.ArgumentParser(description="Plot CSL benchmark results.")
+	parser = argparse.ArgumentParser(description="Plot CSPL benchmark results.")
 	parser.add_argument(
 		"--input", type=Path, help="read a saved `task benchmark` table instead of running it"
 	)

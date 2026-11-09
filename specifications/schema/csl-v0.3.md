@@ -4,55 +4,15 @@
 
 **Status:** Working draft\
 **Purpose:** Declarative resource schema definition for Controlplane\
-**Inputs:** CSL Draft v0.1 and CSL Draft v0.2 supplied for this revision
 
 ------------------------------------------------------------------------
 
-## Revision note
+## Scope
 
-This draft consolidates the two supplied drafts. It uses v0.2's resource
-model as the current direction: resource-level fields are ordinary
-fields, while `desired` and `observed` are optional lifecycle sections.
-It restores and retains substantial language features specified in v0.1
-that v0.2 omitted or incorrectly described as absent, including reusable
-enumerated types, inline enumerations, numeric and boolean enumerators,
-nullable fields, pattern constraints, uniqueness constraints, refined
-types, expressions, formal grammar, runtime representation, schema
-compilation and registration requirements, and the fuller built-in type
-inventory.
-
-This is a consolidation, not a claim that every feature is fully
-settled. Where the source drafts disagree, this document records the
-conflict and identifies the working rule or open decision. It does not
-silently treat an omission in v0.2 as an intentional removal.
-
-### Main consolidation decisions
-
-1.  The v0.2 resource model is the canonical model for this draft.
-    `metadata` and `spec` are not mandatory or special sections.
-    Resource-level fields are ordinary fields. `desired` and `observed`
-    are optional sections with lifecycle meaning.
-2.  The v0.1 type inventory is retained and combined with v0.2's
-    inventory. Duplicate aliases are identified rather than discarded.
-3.  Enumerations remain supported both inline and as reusable named
-    types. Enumerators may be strings, identifiers representing string
-    literals, numbers, or booleans.
-4.  `optional` and `nullable` are distinct and both are retained. The
-    v0.2 statement that null is not permitted is treated as a
-    conflicting proposal, not as an agreed removal.
-5.  List cardinality remains part of list type syntax. The v0.1 `unique`
-    modifier is retained as a supported proposed constraint.
-6.  The v0.1 expression and conditional-validation material is retained,
-    with v0.2's clearer desired-state example incorporated.
-7.  The v0.1 formal grammar, runtime representation, schema registration
-    and execution requirements, and excluded-feature list are restored.
-8.  The v0.2 reserved-word list is not adopted as a global list of
-    forbidden field names. CSL uses contextual keywords. See Section 3.
-9.  `version` is a contextual token in the resource declaration header,
-    not a globally reserved identifier. A field named `version` is
-    valid.
-10. The spelling `resource` is used consistently; occurrences of
-    `resouce` in the source drafts are treated as typographical errors.
+This specification defines the CSL resource model, type system,
+validation rules, and runtime responsibilities. Resource-level fields
+are ordinary fields. `desired` and `observed` are optional lifecycle
+sections.
 
 ## 1. Introduction
 
@@ -63,6 +23,13 @@ defaults, and validation rules.
 CSL is designed for a dynamic control plane in which resource kinds and
 schema versions can be registered at runtime, without database schema
 migrations or application restarts.
+
+CSL supports string constraints that use the **Controlplane String
+Pattern Language (CSPL)**. CSPL is a declarative language for defining
+named patterns that match complete strings. A CSL document can declare
+CSPL patterns with `pattern Name { expression }` and reference them from
+field or refined-type constraints. See the [CSPL v0.1 specification](../string-pattern/cspl-v0.1.md)
+for the pattern syntax and matching rules.
 
 The language is intended to be:
 
@@ -104,7 +71,7 @@ resource VirtualMachine version 1 {
 
     observed {
         phase: string oneof(pending provisioning running stopped failed)
-        ready: bool = false
+        ready: bool := false
         ip_address: ip optional
         node: hostname optional
     }
@@ -187,7 +154,7 @@ or other authorized system components.
 ``` csl
 observed {
     phase: string oneof(pending provisioning running stopped failed)
-    ready: bool = false
+    ready: bool := false
     ip_address: ip optional
     node: hostname optional
 }
@@ -239,124 +206,65 @@ Identifiers are case-sensitive. The grammar determines whether an
 identifier is interpreted as a field name, type name, resource name, or
 contextual keyword.
 
-### 3.3 Contextual keywords --- not globally reserved field names
+### 3.3 Contextual keywords
 
-The v0.2 draft listed `resource`, `type`, `desired`, `observed`, `if`,
-`oneof`, `optional`, `range`, `length`, `map`, and `to` as "reserved
-words". That wording is too broad unless it states what positions they
-are reserved in. This draft does **not** make those words globally
-unavailable as field names.
+CSL keywords have special meaning only in the grammar positions where
+their constructs are valid. A keyword is not globally unavailable as a
+field name. The following table defines the keyword contexts:
 
-CSL uses contextual keywords: a word has keyword meaning only in a
-grammar position where that construct is expected. In particular:
+| Word | Keyword meaning | Field-name status |
+|---|---|---|
+| `resource` | Top-level resource declaration, when followed by a resource name | May be used as a field name when followed by `:` |
+| `type` | Top-level custom type declaration | May be used as a field name when followed by `:` |
+| `version` | Resource declaration header after the resource name | Valid as an ordinary field name |
+| `desired` | Lifecycle section declaration when followed by an object body `{ ... }` | Valid as a field name when followed by `:` |
+| `observed` | Lifecycle section declaration when followed by an object body `{ ... }` | Valid as a field name when followed by `:` |
+| `if` | Conditional declaration in an object body | May be used as a field name when followed by `:` if the parser can distinguish the declaration |
+| `oneof` | Enumeration constraint after a type expression | May be used as a field name when followed by `:` |
+| `optional` | Field or nested-object modifier in modifier position | May be used as a field name when followed by `:` |
+| `nullable` | Field modifier in modifier position | May be used as a field name when followed by `:` |
+| `range` | Range constraint after a type expression | May be used as a field name when followed by `:` |
+| `length` | Length constraint after a type expression | May be used as a field name when followed by `:` |
+| `map` | Map type constructor when followed by `[` in a type expression | May be used as a field name when followed by `:` |
+| `to` | Range-expression separator | May be used as a field name when followed by `:` |
+| `where` | Refined-type predicate introducer | May be used as a field name when followed by `:` |
+| `pattern` | CSPL pattern declaration or named-pattern constraint | May be used as a field name when followed by `:` |
+| `unique` | Collection uniqueness modifier in modifier position | May be used as a field name when followed by `:` |
+| `and`, `or`, `not`, `in` | Expression operators | May be used as a field name when followed by `:` |
 
-  -----------------------------------------------------------------------
-  Word                    Keyword meaning applies Field-name status
-                          in                      
-  ----------------------- ----------------------- -----------------------
-  `resource`              Top-level resource      May be used as a field
-                          declaration, when       name when followed by
-                          followed by a resource  `:`
-                          name                    
+The parser must use syntactic position and lookahead to distinguish
+declarations from modifiers. Implementations must reject ambiguous or
+malformed input rather than silently reinterpret it.
 
-  `type`                  Top-level custom type   May be used as a field
-                          declaration             name when followed by
-                                                  `:`
-
-  `version`               Resource declaration    Valid as an ordinary
-                          header after the        field name
-                          resource name           
-
-  `desired`               Lifecycle section       Valid as a field name
-                          declaration when        when followed by `:`
-                          followed by an object   
-                          body `{ ... }`          
-
-  `observed`              Lifecycle section       Valid as a field name
-                          declaration when        when followed by `:`
-                          followed by an object   
-                          body `{ ... }`          
-
-  `if`                    Conditional declaration May be used as a field
-                          in an object body       name when followed by
-                                                  `:` if the parser can
-                                                  distinguish the
-                                                  declaration
-
-  `oneof`                 Enumeration constraint  May be used as a field
-                          after a type expression name when followed by
-                                                  `:`
-
-  `optional`              Field or nested-object  May be used as a field
-                          modifier in modifier    name when followed by
-                          position                `:`
-
-  `nullable`              Field modifier in       May be used as a field
-                          modifier position       name when followed by
-                                                  `:`
-
-  `range`                 Range constraint after  May be used as a field
-                          a type expression       name when followed by
-                                                  `:`
-
-  `length`                Length constraint after May be used as a field
-                          a type expression       name when followed by
-                                                  `:`
-
-  `map`                   Map type constructor    May be used as a field
-                          when followed by `[` in name when followed by
-                          a type expression       `:`
-
-  `to`                    Range-expression        May be used as a field
-                          separator               name when followed by
-                                                  `:`
-
-  `where`                 Refined-type predicate  May be used as a field
-                          introducer              name when followed by
-                                                  `:`
-
-  `matches`               Pattern constraint or   May be used as a field
-                          approved pure-function  name when followed by
-                          call                    `:`
-
-  `unique`                Collection uniqueness   May be used as a field
-                          modifier in modifier    name when followed by
-                          position                `:`
-
-  `and`, `or`, `not`,     Expression operators    May be used as a field
-  `in`                                            name when followed by
-                                                  `:`
-  -----------------------------------------------------------------------
-
-This table describes parser context, not a list of globally forbidden
-identifiers. A parser must use syntactic position and lookahead to
-distinguish declarations from modifiers. Implementations must reject
-genuinely ambiguous or malformed input rather than silently reinterpret
-it.
+CSPL `pattern` declarations may appear at the top level beside CSL type
+and resource declarations. CSL type names and CSPL pattern names occupy
+separate namespaces. A field's `pattern` constraint resolves only to a
+CSPL pattern. Pattern bodies use CSPL expression syntax and must match
+the complete field value.
 
 The words `true`, `false`, and `null` are literals in value-expression
-positions. Whether they may be used as field names is a lexical/parser
-decision that must be consistent; this draft recommends allowing them as
-field names only when unambiguously followed by `:`.
+positions. They may be field names only when the grammar can distinguish
+the field declaration unambiguously, such as when the word is followed
+by `:`.
 
 ### 3.4 Strings
 
 Strings use double quotes.
 
 ``` csl
-name: string = "production"
+name: string := "production"
 ```
 
 Supported escapes:
 
-  Escape     Meaning
-  ---------- --------------------
-  `\"`       Double quote
-  `\\`       Backslash
-  `\n`       Newline
-  `\r`       Carriage return
-  `\t`       Tab
-  `\uXXXX`   Unicode code point
+| Escape | Meaning |
+|---|---|
+| `\"` | Double quote |
+| `\\` | Backslash |
+| `\n` | Newline |
+| `\r` | Carriage return |
+| `\t` | Tab |
+| `\uXXXX` | Unicode code point |
 
 The exact treatment of surrogate pairs and invalid Unicode escape
 sequences must be specified by the parser implementation profile.
@@ -366,10 +274,10 @@ sequences must be specified by the parser implementation profile.
 Integer and decimal literals are supported.
 
 ``` csl
-cpu: int16 = 4
-ratio: decimal = 1.25
-memory: bytes = 8GiB
-timeout: duration = "30s"
+cpu: int16 := 4
+ratio: decimal := 1.25
+memory: bytes := 8GiB
+timeout: duration := "30s"
 ```
 
 Numeric literals may include units when the expected type supports them.
@@ -396,51 +304,49 @@ declarations are separated by whitespace or newlines.
 
 ## 4. Built-in types
 
-The following inventory consolidates the types present in either
-supplied draft. Inclusion in this inventory preserves the proposal; it
-does not imply that every implementation detail is already fully
-standardized.
+This section defines the built-in type inventory. Some representation
+and validation details remain open and are listed in Section 21.
 
 ### 4.1 Primitive and general types
 
-  Type        Description
-  ----------- ---------------------------------------
-  `string`    UTF-8 string
-  `bool`      Boolean
-  `boolean`   Alias for `bool`
-  `any`       Any supported CSL value
-  `json`      Arbitrary valid JSON-compatible value
+| Type | Description |
+|---|---|
+| `string` | UTF-8 string |
+| `bool` | Boolean |
+| `boolean` | Alias for `bool` |
+| `any` | Any supported CSL value |
+| `json` | Arbitrary valid JSON-compatible value |
 
 `any` accepts any supported CSL value, while `json` specifically
 represents JSON-compatible data.
 
 ### 4.2 Integer types
 
-  Type       Description
-  ---------- -------------------------
-  `int`      Alias for `int64`
-  `int8`     Signed 8-bit integer
-  `int16`    Signed 16-bit integer
-  `int32`    Signed 32-bit integer
-  `int64`    Signed 64-bit integer
-  `uint`     Alias for `uint64`
-  `uint8`    Unsigned 8-bit integer
-  `uint16`   Unsigned 16-bit integer
-  `uint32`   Unsigned 32-bit integer
-  `uint64`   Unsigned 64-bit integer
+| Type | Description |
+|---|---|
+| `int` | Alias for `int64` |
+| `int8` | Signed 8-bit integer |
+| `int16` | Signed 16-bit integer |
+| `int32` | Signed 32-bit integer |
+| `int64` | Signed 64-bit integer |
+| `uint` | Alias for `uint64` |
+| `uint8` | Unsigned 8-bit integer |
+| `uint16` | Unsigned 16-bit integer |
+| `uint32` | Unsigned 32-bit integer |
+| `uint64` | Unsigned 64-bit integer |
 
 Integer types reject fractional values and values outside their
 representable ranges.
 
 ### 4.3 Floating-point and decimal types
 
-  Type        Description
-  ----------- --------------------------------
-  `float32`   IEEE 754 32-bit floating point
-  `float64`   IEEE 754 64-bit floating point
-  `float`     Alias for `float64`
-  `decimal`   Arbitrary-precision decimal
-  `number`    General numeric value
+| Type | Description |
+|---|---|
+| `float32` | IEEE 754 32-bit floating point |
+| `float64` | IEEE 754 64-bit floating point |
+| `float` | Alias for `float64` |
+| `decimal` | Arbitrary-precision decimal |
+| `number` | General numeric value |
 
 `decimal` should use an exact representation rather than binary
 floating-point semantics and is recommended for financial and
@@ -451,26 +357,26 @@ them.
 
 ### 4.4 Binary and size types
 
-  Type       Description
-  ---------- ----------------------------
-  `bytes`    Non-negative byte quantity
-  `binary`   Binary data
-  `base64`   Base64-encoded data
-  `hex`      Hexadecimal-encoded data
+| Type | Description |
+|---|---|
+| `bytes` | Non-negative byte quantity |
+| `binary` | Binary data |
+| `base64` | Base64-encoded data |
+| `hex` | Hexadecimal-encoded data |
 
 `bytes` represents a numeric size, whereas `binary` represents actual
 binary content. `base64` and `hex` represent encoded textual forms.
 
 ### 4.5 Date and time types
 
-  Type          Description
-  ------------- -----------------------------
-  `date`        Calendar date
-  `time`        Time of day
-  `timestamp`   Date and time with timezone
-  `datetime`    Alias for `timestamp`
-  `duration`    Time interval
-  `timezone`    Timezone identifier
+| Type | Description |
+|---|---|
+| `date` | Calendar date |
+| `time` | Time of day |
+| `timestamp` | Date and time with timezone |
+| `datetime` | Alias for `timestamp` |
+| `duration` | Time interval |
+| `timezone` | Timezone identifier |
 
 Canonical representations:
 
@@ -486,36 +392,36 @@ preservation remains an open specification detail.
 
 ### 4.6 Identifier types
 
-  Type      Description
-  --------- -----------------
-  `uuid`    UUID identifier
-  `uuid4`   UUID version 4
-  `uuid7`   UUID version 7
-  `ulid`    ULID identifier
+| Type | Description |
+|---|---|
+| `uuid` | UUID identifier |
+| `uuid4` | UUID version 4 |
+| `uuid7` | UUID version 7 |
+| `ulid` | ULID identifier |
 
 Identifier types are represented as strings in resource documents and
 should use canonical textual forms.
 
 ### 4.7 Networking types
 
-  Type          Description
-  ------------- -----------------------------
-  `ip`          IPv4 or IPv6 address
-  `ipv4`        IPv4 address
-  `ipv6`        IPv6 address
-  `cidr`        IPv4 or IPv6 network prefix
-  `ipv4_cidr`   IPv4 network prefix
-  `ipv6_cidr`   IPv6 network prefix
-  `mac`         MAC address
-  `hostname`    Hostname
-  `domain`      Domain name
-  `fqdn`        Fully qualified domain name
-  `dns`         DNS name
-  `url`         Absolute URL
-  `uri`         URI
-  `email`       Email address
-  `port`        TCP/UDP port number
-  `protocol`    Network protocol identifier
+| Type | Description |
+|---|---|
+| `ip` | IPv4 or IPv6 address |
+| `ipv4` | IPv4 address |
+| `ipv6` | IPv6 address |
+| `cidr` | IPv4 or IPv6 network prefix |
+| `ipv4_cidr` | IPv4 network prefix |
+| `ipv6_cidr` | IPv6 network prefix |
+| `mac` | MAC address |
+| `hostname` | Hostname |
+| `domain` | Domain name |
+| `fqdn` | Fully qualified domain name |
+| `dns` | DNS name |
+| `url` | Absolute URL |
+| `uri` | URI |
+| `email` | Email address |
+| `port` | TCP/UDP port number |
+| `protocol` | Network protocol identifier |
 
 Additional semantics:
 
@@ -539,16 +445,16 @@ DNS validation must not require an external DNS lookup.
 
 ### 4.8 Text and format types
 
-  Type             Description
-  ---------------- ----------------------------------------
-  `alpha`          Alphabetic characters
-  `alphanumeric`   Alphabetic and numeric characters
-  `numeric`        Numeric characters represented as text
-  `hexadecimal`    Hexadecimal text
-  `path`           Generic path
-  `filepath`       File path
-  `directory`      Directory path
-  `crontab`        Cron expression
+| Type | Description |
+|---|---|
+| `alpha` | Alphabetic characters |
+| `alphanumeric` | Alphabetic and numeric characters |
+| `numeric` | Numeric characters represented as text |
+| `hexadecimal` | Hexadecimal text |
+| `path` | Generic path |
+| `filepath` | File path |
+| `directory` | Directory path |
+| `crontab` | Cron expression |
 
 Path types perform syntactic validation only. They must not access the
 filesystem or verify that a path exists. `crontab` validates expression
@@ -556,13 +462,13 @@ syntax; it does not execute schedules.
 
 ### 4.9 Cryptographic and certificate types
 
-  Type            Description
-  --------------- -----------------------------
-  `certificate`   X.509 certificate
-  `csr`           Certificate signing request
-  `pem`           PEM-encoded data
-  `public_key`    Public key
-  `private_key`   Private key
+| Type | Description |
+|---|---|
+| `certificate` | X.509 certificate |
+| `csr` | Certificate signing request |
+| `pem` | PEM-encoded data |
+| `public_key` | Public key |
+| `private_key` | Private key |
 
 These types validate encoding and, where applicable, structural
 validity. They do not imply that a certificate is trusted, a key is
@@ -586,16 +492,15 @@ networks: string[1:8]
 ```
 
 Supported forms:
-
-  Syntax           Meaning
-  ---------------- ------------------------
-  `string[]`       Zero or more elements
-  `string[8]`      Zero to eight elements
-  `string[1:8]`    One to eight elements
-  `string[3:10]`   Three to ten elements
-  `string[5:5]`    Exactly five elements
-  `string[1:]`     At least one element
-  `string[:]`      Zero or more elements
+| Syntax | Meaning |
+|---|---|
+| `string[]` | Zero or more elements |
+| `string[8]` | Zero to eight elements |
+| `string[1:8]` | One to eight elements |
+| `string[3:10]` | Three to ten elements |
+| `string[5:5]` | Exactly five elements |
+| `string[1:]` | At least one element |
+| `string[:]` | Zero or more elements |
 
 A single integer specifies the maximum number of elements. An omitted
 lower bound defaults to zero. An omitted upper bound means unlimited,
@@ -612,12 +517,9 @@ matrix: int16[1:8][1:8]
 ```
 
 Cardinality applies to the immediately preceding list constructor. The
-grammar and examples in v0.1 describe suffix ordering inconsistently
-(including an example whose prose reverses which suffix is outermost).
-This draft does not silently standardize that ambiguity: the parser
-specification must define suffix binding unambiguously before
-implementation. For readability, deeply nested lists should generally
-use named custom types.
+binding order of multiple list suffixes is not defined in this draft.
+Implementations must define that order consistently. Use named custom
+types when the intended nesting order would otherwise be unclear.
 
 ### 5.3 Maps
 
@@ -633,12 +535,8 @@ General form:
 map[key_type]value_type
 ```
 
-The original v0.1 draft initially restricted map keys to strings; v0.2
-proposed scalar key types with stable equality and serialization. This
-draft preserves both proposals as an unresolved design choice. **Working
-compatibility rule:** implementations must support string keys. Support
-for additional scalar key types is optional until the language version
-explicitly standardizes it.
+Implementations must support string keys. They may support additional
+scalar key types when their equality and serialization rules are defined.
 
 Examples:
 
@@ -695,18 +593,22 @@ restrictions.
 A refined type adds constraints to an existing type.
 
 ``` csl
-type domain_name string where matches("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
+pattern DomainLabel {
+    lowercase_letter repeat (lowercase_letter | digit | "-") 0 to 61
+}
+pattern DomainName { DomainLabel repeat ("." DomainLabel) 0 to unlimited }
+type domain_name string pattern DomainName
 type positive_integer int64 range 1+
 ```
 
 A refined type inherits the validation rules of its underlying type and
-applies its additional constraints.
+applies its additional constraints. `pattern DomainName` applies the
+CSPL pattern to the complete field value.
 
 ### 6.2 Enumerated types
 
-An enumeration defines a finite set of permitted values. Enumerations
-are supported both inline and as reusable named types. They were present
-in v0.1 and remain part of this consolidated draft.
+An enumeration defines a finite set of permitted values. CSL supports
+enumerations both inline and as reusable named types.
 
 ``` csl
 type machine_model string oneof(q35 i440fx virt pc)
@@ -788,7 +690,7 @@ Custom types:
 A field declaration has the following general form:
 
 ``` csl
-field_name: TYPE [constraints and modifiers] [= default]
+field_name: TYPE [constraints and modifiers] [:= default]
 ```
 
 Examples:
@@ -799,7 +701,7 @@ memory: bytes range 512MiB+
 hostname: hostname
 description: string optional
 description: string nullable
-enabled: bool = true
+enabled: bool := true
 ```
 
 Field names must be unique within their containing object or section,
@@ -848,21 +750,18 @@ Optionality and nullability are independent:
     null.
 -   Optional and nullable: the field may be absent or explicitly null.
 
-This retains v0.1's explicit nullable semantics. v0.2 proposed that
-explicit null values should not be permitted in that version. That is a
-source-draft conflict; this consolidated draft keeps `nullable` as a
-proposed language feature rather than silently deleting it. Whether
-nullable is included in the first implementation profile remains an open
-decision.
+Implementations must preserve the difference between an omitted field
+and a field whose value is `null`. A field declared `nullable` accepts
+`null`; a field without `nullable` rejects it.
 
 ### 7.4 Default values
 
-Defaults are specified using `=`.
+Defaults are specified using `:=`.
 
 ``` csl
-enabled: bool = true
-model: machine_model = q35
-replicas: int16 = 1
+enabled: bool := true
+model: machine_model := q35
+replicas: int16 := 1
 ```
 
 Defaults are applied during resource creation when the field is omitted.
@@ -915,20 +814,26 @@ hostname: string length 1 to 63
 description: string length 0 to 1024
 ```
 
-Length is measured in Unicode code points, not UTF-8 bytes, as proposed
-in v0.1. The implementation profile must define Unicode version and
-treatment of invalid UTF-8 consistently.
+Length is measured in Unicode code points, not UTF-8 bytes. The
+implementation profile must define the Unicode version and treatment of
+invalid UTF-8 consistently.
 
 ### 8.3 Pattern matching
+ 
+CSL fields and refined types may reference a named CSPL pattern:
 
 ``` csl
-username: string matches("^[a-z][a-z0-9_]{2,31}$")
+pattern Username {
+    ascii_letter repeat (ascii_letter | ascii_digits | "_") 2 to 31
+}
+
+username: string pattern Username
 ```
 
-Patterns use a defined regular-expression dialect. The runtime must use
-the same dialect consistently across implementations. Pattern matching
-is validation only and must not execute arbitrary code. The exact regex
-dialect and resource limits remain to be finalized.
+The pattern name must resolve to a CSPL pattern declaration in the same
+schema document or an explicitly imported pattern scope. CSPL patterns
+match complete strings, so a pattern constraint does not add implicit
+substring matching or execute code.
 
 ### 8.4 Enumerations
 
@@ -942,8 +847,7 @@ type machine_model string oneof(q35 i440fx virt pc)
 model: machine_model
 ```
 
-See Section 6.2. Enumerations are not absent from CSL merely because a
-particular draft section or inventory omitted them.
+See Section 6.2 for the enumeration rules.
 
 ### 8.5 Collection cardinality
 
@@ -954,13 +858,12 @@ networks: string[1:8]
 ports: port[1:16]
 ```
 
-The syntax is described in Section 5.1. Separate `min_items` and
-`max_items` modifiers are not part of the canonical syntax in these
-drafts.
+The syntax is described in Section 5.1. CSL does not use separate
+`min_items` and `max_items` modifiers.
 
 ### 8.6 Uniqueness
 
-The v0.1 `unique` modifier is retained as a proposed list constraint:
+The `unique` modifier requires each element in a list to be distinct:
 
 ``` csl
 networks: string[1:8] unique
@@ -968,9 +871,8 @@ ports: port[1:16] unique
 ```
 
 Uniqueness is evaluated using the canonical equality semantics of the
-element type. Whether `unique` applies to map values or nested
-collections is not established by the source drafts and remains open.
-Map keys are unique by definition.
+element type. This specification does not define `unique` for map values
+or nested collections. Map keys are unique by definition.
 
 ## 9. Expressions
 
@@ -979,22 +881,21 @@ conditional declarations. Expressions must be deterministic and
 side-effect-free.
 
 ### 9.1 Comparison operators
-
-  Operator   Meaning
-  ---------- -----------------------
-  `==`       Equal
-  `!=`       Not equal
-  `<`        Less than
-  `<=`       Less than or equal
-  `>`        Greater than
-  `>=`       Greater than or equal
+| Operator | Meaning |
+|---|---|
+| `=` | Equal |
+| `!=` | Not equal |
+| `<` | Less than |
+| `<=` | Less than or equal |
+| `>` | Greater than |
+| `>=` | Greater than or equal |
 
 ### 9.2 Logical operators
 
 The logical operators are `and`, `or`, and `not`.
 
 ``` csl
-if desired.enabled == true and desired.replicas > 1 {
+if desired.enabled = true and desired.replicas > 1 {
     ...
 }
 ```
@@ -1032,26 +933,16 @@ tenant
 ```
 
 References are resolved against the resource being validated. A
-reference to an unknown field is a schema registration error. For
-expressions nested inside a resource section, the canonical
-root-reference convention must be consistent. The v0.1 examples use
-`spec.cpu`; v0.2 examples use `desired.backup_enabled`. This draft
-adopts section-qualified references such as `desired.cpu` and ordinary
-resource-level references such as `tenant`.
+reference to an unknown field is a schema registration error.
+Use unqualified names for resource-level fields and section-qualified
+names for lifecycle fields, such as `tenant`, `desired.cpu`, and
+`observed.phase`.
 
 ### 9.6 Functions
 
-The v0.1 specification permits a small set of built-in pure functions,
-including:
-
-``` csl
-matches(value, pattern)
-```
-
-Additional functions may be standardized in later versions. User-defined
-functions and arbitrary code execution are not supported. Function
-availability, typing, complexity limits, and deterministic behavior must
-be specified by the language version.
+CSL does not provide user-defined functions or arbitrary code execution.
+Pattern validation uses named CSPL patterns as described in Section 8.3,
+not function calls.
 
 ## 10. Conditional validation
 
@@ -1075,7 +966,7 @@ The `else` branch is optional.
 ``` csl
 resource Database version 1 {
     desired {
-        backup_enabled: bool = false
+        backup_enabled: bool := false
 
         if desired.backup_enabled {
             backup_schedule: crontab
@@ -1085,10 +976,10 @@ resource Database version 1 {
 }
 ```
 
-The v0.1 form with an explicit comparison remains valid:
+An explicit comparison can also be used:
 
 ``` csl
-if desired.backup_enabled == true {
+if desired.backup_enabled = true {
     ...
 }
 ```
@@ -1237,16 +1128,16 @@ The runtime maintains internal fields independently of CSL. These fields
 are not declared by resource authors and cannot be overwritten through
 ordinary resource updates.
 
-  Field                Purpose
-  -------------------- -------------------------------------
-  `uid`                Immutable resource identifier
-  `kind`               Resource kind
-  `schema_version`     Schema version
-  `resource_version`   Version of the stored resource
-  `generation`         Version of desired state
-  `created_at`         Creation timestamp
-  `updated_at`         Last modification timestamp
-  `deleted_at`         Deletion timestamp, when applicable
+| Field | Purpose |
+|---|---|
+| `uid` | Immutable resource identifier |
+| `kind` | Resource kind |
+| `schema_version` | Schema version |
+| `resource_version` | Version of the stored resource |
+| `generation` | Version of desired state |
+| `created_at` | Creation timestamp |
+| `updated_at` | Last modification timestamp |
+| `deleted_at` | Deletion timestamp, when applicable |
 
 `generation` increments when desired state changes. `resource_version`
 changes whenever the stored resource changes, including resource-level
@@ -1259,16 +1150,17 @@ that users must include in CSL.
 
 ## 14. Formal grammar
 
-The following EBNF is a consolidated core grammar, not yet a complete
-parser conformance suite. It restores the grammar work from v0.1 and
-incorporates v0.2's resource-level fields and lifecycle sections.
-Implementations must reject ambiguous or unsupported syntax rather than
-guessing.
+The following EBNF defines the core grammar. It does not fully specify
+modifier ordering, nested-list binding, or every conditional-scope rule.
+The `cspl_expression` nonterminal uses the expression grammar in the CSPL
+v0.1 specification. Implementations must reject ambiguous or unsupported
+syntax rather than guessing.
 
 ``` ebnf
 document                 = { declaration } ;
 
 declaration              = type_declaration
+                         | pattern_declaration
                          | resource_declaration ;
 
 resource_declaration     = "resource" identifier
@@ -1291,9 +1183,13 @@ type_declaration         = "type" identifier
                            | enum_type
                            | object_body ) ;
 
+pattern_declaration      = "pattern" identifier
+                           "{" cspl_expression "}" ;
+
 refined_type             = field_type
                            [ "where" expression ]
-                           [ range_constraint ] ;
+                           [ range_constraint ]
+                           [ pattern_constraint ] ;
 
 enum_type                = field_type enumeration ;
 
@@ -1348,9 +1244,9 @@ enumeration              = "oneof" "(" value_list ")" ;
 
 value_list               = value { [ "," ] value } ;
 
-pattern_constraint       = "matches" "(" string_literal ")" ;
+pattern_constraint       = "pattern" identifier ;
 
-default_value            = "=" value ;
+default_value            = ":=" value ;
 
 conditional_declaration  = "if" expression object_body
                            [ "else" object_body ] ;
@@ -1386,7 +1282,7 @@ argument_list            = expression { "," expression } ;
 
 logical_operator         = "and" | "or" ;
 
-comparison_operator      = "==" | "!="
+comparison_operator      = "=" | "!="
                          | "<" | "<="
                          | ">" | ">=" ;
 
@@ -1427,8 +1323,8 @@ string_literal           = '"' { character } '"' ;
     according to the expected field type; for string fields it is a
     string literal, and for enum fields it must resolve to a permitted
     enum value.
-7.  `=` is used for default assignment. `==` is used for equality
-    comparisons.
+7.  `:=` is the assignment operator for field defaults. `=` is the
+    equality comparison operator.
 8.  Field declarations are separated by whitespace or newlines;
     semicolons begin comments and are not field terminators.
 9.  Duplicate field declarations in the same object scope are invalid
@@ -1454,26 +1350,26 @@ for translating them into its internal representation.
 
 Recommended canonical representations:
 
-  CSL type                Runtime representation
-  ----------------------- ---------------------------------------------
-  `string`                UTF-8 string
-  `bool`                  Boolean
-  Integer types           Exact integer
-  `float32`, `float64`    IEEE 754 floating point
-  `decimal`               Arbitrary-precision decimal
-  `bytes`                 Integer byte count
-  `duration`              Canonical duration representation
-  `timestamp`             UTC instant with defined timezone semantics
-  `date`                  ISO 8601 date
-  `time`                  ISO 8601 time
-  `uuid`, `ulid`          Canonical string
-  `ip`, `ipv4`, `ipv6`    Canonical address string
-  `cidr`                  Canonical network prefix string
-  `mac`                   Canonical MAC address string
-  `url`, `uri`, `email`   Validated string
-  `map`                   Object/map with canonical keys
-  List                    Ordered array
-  Object                  Named fields
+| CSL type | Runtime representation |
+|---|---|
+| `string` | UTF-8 string |
+| `bool` | Boolean |
+| Integer types | Exact integer |
+| `float32`, `float64` | IEEE 754 floating point |
+| `decimal` | Arbitrary-precision decimal |
+| `bytes` | Integer byte count |
+| `duration` | Canonical duration representation |
+| `timestamp` | UTC instant with defined timezone semantics |
+| `date` | ISO 8601 date |
+| `time` | ISO 8601 time |
+| `uuid`, `ulid` | Canonical string |
+| `ip`, `ipv4`, `ipv6` | Canonical address string |
+| `cidr` | Canonical network prefix string |
+| `mac` | Canonical MAC address string |
+| `url`, `uri`, `email` | Validated string |
+| `map` | Object/map with canonical keys |
+| List | Ordered array |
+| Object | Named fields |
 
 The wire representation must be stable across implementations. JSON
 resource documents should use:
@@ -1536,8 +1432,6 @@ ValidationError {
     constraint: "range 1 to 128"
     message: "value must be between 1 and 128"
 }
-```
-
 Sensitive values must not be included in validation errors.
 
 ## 17. Explicit non-goals and excluded functionality
@@ -1604,12 +1498,15 @@ broker, API implementation, or controller architecture.
 
 ### 19.1 VirtualMachine
 
-This example preserves the reusable types, enum values, constraints,
-nested objects, defaults, and conditional monitoring from v0.1, while
-using v0.2's resource-level fields and lifecycle sections.
+This example shows reusable types, enum values, constraints, nested
+objects, defaults, lifecycle sections, and conditional validation.
 
 ``` csl
-type domain_name string where matches("^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
+pattern DomainLabel {
+    lowercase_letter repeat (lowercase_letter | digit | "-") 0 to 61
+}
+pattern DomainName { DomainLabel repeat ("." DomainLabel) 0 to unlimited }
+type domain_name string pattern DomainName
 type machine_model string oneof(q35 i440fx virt pc)
 type disk_size bytes range 10GiB to 1TiB
 
@@ -1626,28 +1523,28 @@ resource VirtualMachine version 1 {
         memory: bytes range 512MiB+
         image: string
         networks: domain_name[1:8] optional
-        monitored: bool = true
-        model: machine_model = q35
+        monitored: bool := true
+        model: machine_model := q35
         number_of_disks: int8 oneof(1 2 3)
         size_of_disks: disk_size[1:10] optional
 
         backup {
-            enabled: bool = false
-            schedule: crontab = "0 0 * * *"
+            enabled: bool := false
+            schedule: crontab := "0 0 * * *"
         }
 
-        if desired.monitored == true {
+        if desired.monitored = true {
             monitoring {
                 endpoint: url
-                interval: duration = "30s"
-                timeout: duration = "5s"
+                interval: duration := "30s"
+                timeout: duration := "5s"
             }
         }
     }
 
     observed {
         phase: string oneof(pending provisioning running stopped failed)
-        ready: bool = false
+        ready: bool := false
         ip_address: ip optional
         node: hostname optional
     }
@@ -1703,7 +1600,10 @@ clarity.
 ``` csl
 type database_engine string oneof(postgres mysql mariadb sqlite)
 type database_role string oneof(read write admin)
-type database_username string where matches("^[a-zA-Z][a-zA-Z0-9_]{2,31}$")
+pattern DatabaseUsername {
+    ascii_letter repeat (ascii_letter | ascii_digits | "_") 2 to 31
+}
+type database_username string pattern DatabaseUsername
 
 type DatabaseLimits {
     connections: uint16 range 1 to 10000
@@ -1726,20 +1626,20 @@ resource Database version 1 {
     desired {
         engine: database_engine
         version: string
-        replicas: uint8 = 1
+        replicas: uint8 := 1
         storage: bytes range 1GiB+
         limits: DatabaseLimits
         users: DatabaseUser[1:100]
 
         backup {
-            enabled: bool = true
-            schedule: crontab = "0 2 * * *"
-            retention_days: uint16 = 14
+            enabled: bool := true
+            schedule: crontab := "0 2 * * *"
+            retention_days: uint16 := 14
         }
 
-        high_availability: bool = false
+        high_availability: bool := false
 
-        if desired.high_availability == true {
+        if desired.high_availability = true {
             replication {
                 mode: string oneof(sync async)
                 replicas: uint8 range 2 to 5
@@ -1751,7 +1651,7 @@ resource Database version 1 {
         phase: string oneof(pending provisioning running stopped failed)
         endpoint: hostname optional
         port: port
-        ready: bool = false
+        ready: bool := false
     }
 }
 ```
@@ -1763,7 +1663,7 @@ type network_protocol string oneof(tcp udp)
 
 type NetworkPort {
     name: string
-    protocol: network_protocol = tcp
+    protocol: network_protocol := tcp
     port: port
 }
 
@@ -1774,8 +1674,8 @@ resource NetworkPolicy version 1 {
     network_id: uuid
 
     desired {
-        enabled: bool = true
-        default_action: string oneof(allow deny) = deny
+        enabled: bool := true
+        default_action: string oneof(allow deny) := deny
         source_addresses: cidr[1:64]
         destination_addresses: cidr[1:64]
         ingress: NetworkPort[0:128]
@@ -1808,12 +1708,10 @@ desired {
 The existing memory and image values remain unchanged. The complete
 resulting resource is validated before the update is committed.
 
-## 20. Features retained for future consideration
+## 20. Future directions
 
-The following items appeared as future considerations or unresolved
-proposals in one or both source drafts. Their inclusion here is for
-traceability; they are not silently promoted to finalized language
-features.
+The following features are outside the current specification. A future
+extension may define them while preserving deterministic validation.
 
 -   Imports and reusable schema packages.
 -   Namespaces for custom types.
@@ -1837,56 +1735,44 @@ features.
 
 These additions should remain declarative and deterministic.
 
-## 21. Open decisions and source-draft conflicts
+## 21. Open decisions
 
-The following decisions need explicit resolution before CSL v0.3 can be
-treated as a stable implementation specification:
+The following technical details require resolution before this
+specification is stable:
 
-1.  **Nullable support:** v0.1 defines `nullable`; v0.2 says explicit
-    null is not permitted in that version and defers nullable behavior.
-    This draft preserves `nullable` but leaves implementation-profile
-    status open.
-2.  **Map key types:** v0.1 initially restricts keys to strings; v0.2
-    allows scalar keys with stable equality and serialization. This
-    draft requires string-key support and leaves additional key types
-    open.
-3.  **Nested list suffix binding:** the v0.1 prose and example do not
-    unambiguously agree about which suffix constrains the outermost
-    list. The grammar and examples must be reconciled.
-4.  **Conditional expression root:** v0.1 examples use `spec.field`;
-    v0.2 uses `desired.field`. This draft adopts `desired.field` and
-    `observed.field` for lifecycle sections, and unqualified root fields
-    for resource-level fields.
-5.  **Conditional declarations and duplicate fields:** the precise
-    merge/compatibility behavior for a field declared in multiple
-    branches must be formalized.
-6.  **Modifier ordering:** the field grammar must specify whether
-    constraints and modifiers can appear in any order or have a
-    canonical order.
-7.  **Regex dialect:** choose and version a deterministic regex dialect
-    with complexity limits.
-8.  **Duration format:** define accepted units, parsing, normalization,
-    and overflow behavior.
-9.  **Timestamp normalization:** define whether original offsets are
-    preserved or normalized to UTC in canonical storage.
-10. **Binary and JSON values:** define canonical wire encodings for
+1.  **Additional map key types:** define which scalar key types are
+    supported and how they are compared and serialized. String keys are
+    required.
+2.  **Nested list suffix binding:** define how multiple list suffixes
+    bind and represent nested collection dimensions.
+3.  **Conditional declarations:** define compatibility rules when
+    multiple branches declare the same field.
+4.  **Modifier ordering:** define whether constraints and modifiers can
+    appear in any order or require a canonical order.
+5.  **CSPL pattern resource limits:** define bounds on parsed and
+    compiled pattern size and matching work.
+6.  **Duration format:** define accepted units, normalization, and
+    overflow behavior.
+7.  **Timestamp normalization:** define whether storage preserves input
+    offsets or normalizes timestamps to UTC.
+8.  **Binary and JSON values:** define canonical wire encodings for
     `binary`, `any`, and `json`.
-11. **Map ordering:** define whether map order is semantically
+9.  **Map ordering:** define whether map order is semantically
     irrelevant and how canonical serialization orders keys.
-12. **Unique semantics:** define equality for each supported element
-    type and whether uniqueness can apply beyond lists.
-13. **Reserved/contextual keywords:** confirm the contextual-keyword
-    model and parser lookahead rules. The v0.2 global reserved-word list
-    is not adopted as a restriction on field names.
-14. **`any` and `json`:** define whether these types may contain nested
-    CSL-specific values or only JSON values.
-15. **Sensitive types:** define whether sensitivity is intrinsic to
-    `private_key` only or whether general field annotations will be
-    introduced.
+10. **Uniqueness:** define equality for each supported element type and
+    whether uniqueness applies beyond list elements.
+11. **Contextual keywords:** define parser lookahead rules for
+    identifiers that can also be keywords.
+12. **Type-specific JSON values:** define whether `any` and `json` may
+    contain CSL-specific values or only JSON values.
+13. **Sensitive fields:** define whether sensitivity applies only to
+    types such as `private_key` or can be declared on any field.
+14. **Unicode handling:** define the Unicode version and treatment of
+    invalid UTF-8 for string length and validation.
 
 ## 22. Design summary
 
-CSL v0.3 is intended to use a consistent type-oriented syntax:
+CSL uses a consistent type-oriented syntax:
 
 ``` csl
 ; Primitive
@@ -1896,7 +1782,7 @@ name: string
 cpu: int16 range 1 to 128
 
 ; Default
-enabled: bool = true
+enabled: bool := true
 
 ; Optional
 description: string optional
@@ -1932,7 +1818,7 @@ resources {
 }
 
 ; Conditional declaration
-if desired.enabled == true {
+if desired.enabled = true {
     monitoring {
         endpoint: url
     }

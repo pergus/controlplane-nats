@@ -1,0 +1,27 @@
+pattern EmailName {
+    repeat (
+        letters
+        | digits
+        | "."
+        | "_"
+        | "%"
+        | "+"
+        | "-"
+    ) 1 to unlimited
+}
+
+pattern SubDomain {
+    repeat (
+        letters
+        | digits
+        | "-"
+    ) 1 to unlimited
+}
+
+pattern Domain {
+    repeat ( "." SubDomain ) 1 to unlimited
+}
+
+pattern EmailAddress {
+    EmailName "@" SubDomain Domain
+}

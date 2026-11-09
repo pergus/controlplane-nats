@@ -1,6 +1,6 @@
-// Package main implements regular expression to CSL pattern translation.
+// Package main implements regular expression to CSPL pattern translation.
 // The translation is limited to a subset of Go's regular expression syntax
-// that can be represented in CSL. Unsupported features include:
+// that can be represented in CSPL. Unsupported features include:
 //
 //   - Assertions: ^, $, \b, \B
 //   - Backreferences: \1, \2, ...
@@ -24,7 +24,7 @@ import (
 // maxRegexClassRunes bounds character-class expansion during regex conversion.
 const maxRegexClassRunes = 512
 
-// RegexToPattern translates a Go regular expression into a CSL expression.
+// RegexToPattern translates a Go regular expression into a CSPL expression.
 // The expression is intended for this package's full-string matcher.
 func RegexToPattern(expression string) (string, error) {
 	parsed, err := syntax.Parse(expression, syntax.Perl)
@@ -40,7 +40,7 @@ func RegexToPattern(expression string) (string, error) {
 	return prettyPatternExpression(generated)
 }
 
-// prettyPatternExpression parses and formats a generated CSL expression.
+// prettyPatternExpression parses and formats a generated CSPL expression.
 func prettyPatternExpression(expression string) (string, error) {
 	p, err := newParser(expression)
 	if err != nil {
@@ -59,7 +59,7 @@ func prettyPatternExpression(expression string) (string, error) {
 	return formatPatternNode(root, 0), nil
 }
 
-// formatPatternNode prints a CSL node with indentation for nested expressions.
+// formatPatternNode prints a CSPL node with indentation for nested expressions.
 func formatPatternNode(n *node, depth int) string {
 	indent := strings.Repeat("    ", depth)
 
@@ -116,7 +116,7 @@ func formatPatternAlternativeContents(n *node, depth int) string {
 func renderRegex(re *syntax.Regexp, atStart, atEnd bool) (string, error) {
 	switch re.Op {
 	case syntax.OpNoMatch:
-		return "", fmt.Errorf("regular expression language cannot be represented by CSL")
+		return "", fmt.Errorf("regular expression language cannot be represented by CSPL")
 	case syntax.OpEmptyMatch:
 		return `""`, nil
 	case syntax.OpBeginText, syntax.OpEndText:
@@ -245,7 +245,7 @@ func renderRegexClass(re *syntax.Regexp) (string, error) {
 	}
 
 	if len(runes) == 0 {
-		return "", fmt.Errorf("empty character classes cannot be represented by CSL")
+		return "", fmt.Errorf("empty character classes cannot be represented by CSPL")
 	}
 
 	parts := make([]string, 0, len(runes))
@@ -274,7 +274,7 @@ func renderRegexClass(re *syntax.Regexp) (string, error) {
 	}
 
 	if len(parts) == 0 {
-		return "", fmt.Errorf("empty character classes cannot be represented by CSL")
+		return "", fmt.Errorf("empty character classes cannot be represented by CSPL")
 	}
 
 	if len(parts) == 1 {
@@ -333,7 +333,7 @@ func nextFoldedRune(r rune) rune {
 	return unicode.SimpleFold(r)
 }
 
-// renderRegexRepeat wraps a translated expression in CSL repetition syntax.
+// renderRegexRepeat wraps a translated expression in CSPL repetition syntax.
 func renderRegexRepeat(child *syntax.Regexp, min, max int) (string, error) {
 	expression, err := renderRegex(child, false, false)
 	if err != nil {

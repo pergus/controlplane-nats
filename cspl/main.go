@@ -1,13 +1,13 @@
-// Command csl-pattern validates a value against a named pattern in a CSL file.
-// It can also convert a Go regular expression into a CSL pattern definition.
+// Command cspl-pattern validates a value against a named pattern in a CSPL file.
+// It can also convert a Go regular expression into a CSPL pattern definition.
 //
 // Usage:
-//   csl-pattern -file patterns.csl [-list] [-pattern Name] value
-//   csl-pattern -regex-file expression.regex [-name PatternName]
-// The -list option prints the names of all definitions in the CSL file.
+//   cspl-pattern -file patterns.cspl [-list] [-pattern Name] value
+//   cspl-pattern -regex-file expression.regex [-name PatternName]
+// The -list option prints the names of all definitions in the CSPL file.
 // The -pattern option specifies which definition to use for validation.
 // The -regex-file option reads a Go regular expression from a file and prints a
-// corresponding CSL pattern definition.
+// corresponding CSPL pattern definition.
 // The -name option specifies the name of the generated pattern.
 //
 // The program exits with status 0 if the value is valid, 1 if invalid, and 2 for
@@ -27,7 +27,7 @@ import (
 	"unicode/utf8"
 )
 
-// tokenKind represents the type of a token in the CSL source.
+// tokenKind represents the type of a token in the CSPL source.
 type tokenKind int
 
 const (
@@ -38,19 +38,18 @@ const (
 	tokRParen                  // right parenthesis
 	tokLBrace                  // left brace
 	tokRBrace                  // right brace
-	tokEqual                   // equal sign
 	tokPipe                    // pipe
 	tokNumber                  // number
 )
 
-// token represents a lexical token in the CSL source.
+// token represents a lexical token in the CSPL source.
 type token struct {
 	kind tokenKind // token category
 	text string
 	pos  int
 }
 
-// lexer scans CSL source and tracks its current byte position.
+// lexer scans CSPL source and tracks its current byte position.
 type lexer struct {
 	src string
 	pos int
@@ -60,11 +59,23 @@ type lexer struct {
 func (l *lexer) next() (token, error) {
 	for l.pos < len(l.src) {
 		r, n := utf8.DecodeRuneInString(l.src[l.pos:])
-		if !unicode.IsSpace(r) {
+		if unicode.IsSpace(r) {
+			l.pos += n
+			continue
+		}
+
+		if r != ';' {
 			break
 		}
 
 		l.pos += n
+		for l.pos < len(l.src) {
+			ch, size := utf8.DecodeRuneInString(l.src[l.pos:])
+			l.pos += size
+			if ch == '\n' || ch == '\r' {
+				break
+			}
+		}
 	}
 
 	if l.pos >= len(l.src) {
@@ -84,8 +95,6 @@ func (l *lexer) next() (token, error) {
 		return token{kind: tokLBrace, text: "{", pos: start}, nil
 	case '}':
 		return token{kind: tokRBrace, text: "}", pos: start}, nil
-	case '=':
-		return token{kind: tokEqual, text: "=", pos: start}, nil
 	case '|':
 		return token{kind: tokPipe, text: "|", pos: start}, nil
 	case '"':
@@ -182,10 +191,9 @@ type node struct {
 	target       *node
 }
 
-// definition stores one named type or pattern declaration.
+// definition stores one named pattern declaration.
 type definition struct {
 	name           string
-	kind           string
 	expr           *node
 	pos            int
 	strategy       matchStrategy
@@ -297,8 +305,8 @@ func (p *parser) parse() error {
 			return err
 		}
 
-		if kw.text != "type" && kw.text != "pattern" {
-			return fmt.Errorf("position %d: expected 'type' or 'pattern', got %q", kw.pos, kw.text)
+		if kw.text != "pattern" {
+			return fmt.Errorf("position %d: expected 'pattern', got %q", kw.pos, kw.text)
 		}
 
 		name, err := p.expect(tokIdent, "")
@@ -310,31 +318,20 @@ func (p *parser) parse() error {
 			return fmt.Errorf("position %d: duplicate definition %q", name.pos, name.text)
 		}
 
-		d := &definition{name: name.text, kind: kw.text, pos: name.pos}
+		d := &definition{name: name.text, pos: name.pos}
 		p.defs[name.text] = d
 
-		if kw.text == "type" {
-			if _, err := p.expect(tokEqual, "="); err != nil {
-				return err
-			}
+		if _, err := p.expect(tokLBrace, "{"); err != nil {
+			return err
+		}
 
-			d.expr, err = p.parseExpression()
-			if err != nil {
-				return err
-			}
-		} else {
-			if _, err := p.expect(tokLBrace, "{"); err != nil {
-				return err
-			}
+		d.expr, err = p.parseExpression()
+		if err != nil {
+			return err
+		}
 
-			d.expr, err = p.parseExpression()
-			if err != nil {
-				return err
-			}
-
-			if _, err := p.expect(tokRBrace, "}"); err != nil {
-				return err
-			}
+		if _, err := p.expect(tokRBrace, "}"); err != nil {
+			return err
 		}
 	}
 
@@ -375,7 +372,7 @@ func (p *parser) parseSequence() (*node, error) {
 	for {
 		t := p.current()
 		if t.kind == tokEOF || t.kind == tokRParen || t.kind == tokRBrace || t.kind == tokPipe ||
-			(t.kind == tokIdent && (t.text == "type" || t.text == "pattern")) {
+			(t.kind == tokIdent && t.text == "pattern") {
 			break
 		}
 
@@ -1251,7 +1248,7 @@ func isHTTPURL(value string) bool {
 	return strings.EqualFold(parsed.Scheme, "http") || strings.EqualFold(parsed.Scheme, "https")
 }
 
-// Program is a compiled set of named CSL type and pattern definitions.
+// Program is a compiled set of named CSPL pattern definitions.
 type Program struct {
 	definitions map[string]*definition
 	matcherPool sync.Pool
@@ -1524,7 +1521,7 @@ func matchSimpleNode(n *node, input string, pos *int) (bool, bool) {
 	}
 }
 
-// convertRegexFile translates a regex file into a validated named CSL definition.
+// convertRegexFile translates a regex file into a validated named CSPL definition.
 func convertRegexFile(path, name string) (string, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -1549,7 +1546,7 @@ func convertRegexFile(path, name string) (string, error) {
 
 	source := fmt.Sprintf("pattern %s {\n%s\n}\n", name, strings.Join(lines, "\n"))
 	if _, err := Compile(source); err != nil {
-		return "", fmt.Errorf("generated invalid CSL pattern: %w", err)
+		return "", fmt.Errorf("generated invalid CSPL pattern: %w", err)
 	}
 
 	return source, nil
@@ -1558,7 +1555,7 @@ func convertRegexFile(path, name string) (string, error) {
 // main parses command-line options and runs the requested pattern operation.
 func main() {
 	file := flag.String("file", "", "pattern definition file")
-	regexFile := flag.String("regex-file", "", "Go regular expression file to convert to CSL")
+	regexFile := flag.String("regex-file", "", "Go regular expression file to convert to CSPL")
 	name := flag.String("name", "", "name for the generated pattern (regex conversion only)")
 	pattern := flag.String("pattern", "", "definition to test")
 	list := flag.Bool("list", false, "list available definitions")
@@ -1585,8 +1582,8 @@ func main() {
 	}
 
 	if *file == "" {
-		fmt.Fprintln(os.Stderr, "usage: csl-pattern -file patterns.csl [-list] [-pattern Name] value")
-		fmt.Fprintln(os.Stderr, "       csl-pattern -regex-file expression.regex [-name PatternName]")
+		fmt.Fprintln(os.Stderr, "usage: cspl-pattern -file patterns.cspl [-list] [-pattern Name] value")
+		fmt.Fprintln(os.Stderr, "       cspl-pattern -regex-file expression.regex [-name PatternName]")
 		os.Exit(2)
 	}
 

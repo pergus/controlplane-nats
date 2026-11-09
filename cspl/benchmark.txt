@@ -150,17 +150,17 @@ schema_domain_name                      143.0    147.0    156.0    1.000    11.0
 Schema regex pipeline
 Pattern                  Stage                   N        Time   Bytes/op  Allocs/op
 -------                  -----                   -        ----   --------  ---------
-schema_username          CSLConvert           6057 19208 ns/op      29876        462
-schema_username          CSLCompile          13221  8928 ns/op      20263        251
+schema_username          CSPLConvert           6057 19208 ns/op      29876        462
+schema_username          CSPLCompile          13221  8928 ns/op      20263        251
 schema_username          RegexCompile        10000 10451 ns/op      26520        403
-schema_username          CSLMatch           246439 490.0 ns/op          0          0
+schema_username          CSPLMatch           246439 490.0 ns/op          0          0
 schema_username          RegexMatch         587131 203.2 ns/op          0          0
-schema_username          CSLEndToEnd          3676 28557 ns/op      50792        714
+schema_username          CSPLEndToEnd          3676 28557 ns/op      50792        714
 schema_username          RegexEndToEnd       10000 10815 ns/op      26530        403
-schema_domain_name       CSLConvert           4129 30291 ns/op      55153        666
-schema_domain_name       CSLCompile           3529 31120 ns/op      78832        714
+schema_domain_name       CSPLConvert           4129 30291 ns/op      55153        666
+schema_domain_name       CSPLCompile           3529 31120 ns/op      78832        714
 schema_domain_name       RegexCompile        59180  2037 ns/op       5328         57
-schema_domain_name       CSLMatch           484138 251.5 ns/op          0          0
+schema_domain_name       CSPLMatch           484138 251.5 ns/op          0          0
 schema_domain_name       RegexMatch         590380 203.6 ns/op          0          0
-schema_domain_name       CSLEndToEnd          1642 73544 ns/op     143546       1425
+schema_domain_name       CSPLEndToEnd          1642 73544 ns/op     143546       1425
 schema_domain_name       RegexEndToEnd       51800  2323 ns/op       5382         57

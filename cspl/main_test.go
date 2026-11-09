@@ -9,15 +9,60 @@ import (
 
 var allocationMatchResult bool
 
-// emailPatterns is the test CSL definition for email-address matching.
+// emailPatterns is the test CSPL definition for email-address matching.
 const emailPatterns = `
-type EmailName = repeat (
+pattern EmailName {
+repeat (
     letters | digits | "." | "_" | "%" | "+" | "-"
 ) 1 to unlimited
-type SubDomain = repeat (letters | digits | "-") 1 to unlimited
-type Domain = repeat ("." SubDomain) 1 to unlimited
+}
+pattern SubDomain { repeat (letters | digits | "-") 1 to unlimited }
+pattern Domain { repeat ("." SubDomain) 1 to unlimited }
 pattern EmailAddress { EmailName "@" SubDomain Domain }
 `
+
+func TestPatternDefinitionsAndTypeKeywordRejection(t *testing.T) {
+	program, err := Compile(`pattern Name { "value" } pattern Named { Name }`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	matched, err := program.Match("Named", "value")
+	if err != nil || !matched {
+		t.Fatalf("expected type reference to match, got matched=%v err=%v", matched, err)
+	}
+
+	for _, source := range []string{`type Name := "value"`, `type Name = "value"`} {
+		if _, err := Compile(source); err == nil {
+			t.Errorf("expected type declaration to be rejected: %s", source)
+		}
+	}
+}
+
+func TestSemicolonComments(t *testing.T) {
+	program, err := Compile(`
+; full-line comment
+pattern Word { "hello" } ; trailing comment
+pattern Greeting { Word } ; comment after definition
+pattern Semicolon { "a;b" }
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, test := range []struct {
+		pattern string
+		value   string
+	}{
+		{pattern: "Greeting", value: "hello"},
+		{pattern: "Semicolon", value: "a;b"},
+	} {
+		matched, err := program.Match(test.pattern, test.value)
+		if err != nil || !matched {
+			t.Errorf("expected %s to match %q, got matched=%v err=%v", test.pattern, test.value, matched, err)
+		}
+	}
+}
 
 // TestEmailAddress checks valid and invalid examples against the email definition.
 func TestEmailAddress(t *testing.T) {
@@ -465,7 +510,7 @@ func TestRegexToPattern(t *testing.T) {
 
 			program, err := Compile("pattern Generated { " + generated + " }")
 			if err != nil {
-				t.Fatalf("generated invalid CSL expression %q: %v", generated, err)
+				t.Fatalf("generated invalid CSPL expression %q: %v", generated, err)
 			}
 
 			oracle, err := regexp.Compile(`\A(?:` + test.expression + `)\z`)
@@ -488,7 +533,7 @@ func TestRegexToPattern(t *testing.T) {
 	}
 }
 
-// TestRegexToPatternUsesCharacterBuiltins checks complete ASCII ranges map to CSL atoms.
+// TestRegexToPatternUsesCharacterBuiltins checks complete ASCII ranges map to CSPL atoms.
 func TestRegexToPatternUsesCharacterBuiltins(t *testing.T) {
 	expression, err := RegexToPattern(`[A-Za-z0-9_]`)
 	if err != nil {
@@ -536,7 +581,7 @@ func TestRegexToPatternRejectsUnsupportedSyntax(t *testing.T) {
 	}
 }
 
-// TestConvertRegexFile checks conversion from a regex file to a usable CSL definition.
+// TestConvertRegexFile checks conversion from a regex file to a usable CSPL definition.
 func TestConvertRegexFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "code.regex")
 	if err := os.WriteFile(path, []byte("go-[0-2]{2}\n"), 0600); err != nil {
@@ -580,7 +625,7 @@ func TestEmailRegexConversion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	emailSource, err := os.ReadFile("email.csl")
+	emailSource, err := os.ReadFile("email.cspl")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -602,7 +647,7 @@ func TestEmailRegexConversion(t *testing.T) {
 		}
 
 		if generatedMatch != handwrittenMatch {
-			t.Errorf("email definitions disagree for %q: regex=%v, CSL=%v", value, generatedMatch, handwrittenMatch)
+			t.Errorf("email definitions disagree for %q: regex=%v, CSPL=%v", value, generatedMatch, handwrittenMatch)
 		}
 	}
 
@@ -621,6 +666,6 @@ func TestEmailRegexConversion(t *testing.T) {
 	}
 
 	if !handwrittenUnicodeMatch {
-		t.Error("hand-written Unicode-aware CSL pattern rejected Unicode email characters")
+		t.Error("hand-written Unicode-aware CSPL pattern rejected Unicode email characters")
 	}
 }

@@ -14,7 +14,7 @@ var benchmarkRegexResult *regexp.Regexp
 
 var patternBenchmarks = []struct {
 	name  string
-	csl   string
+	cspl  string
 	regex string
 	value string
 }{
@@ -67,19 +67,19 @@ var patternBenchmarks = []struct {
 
 func BenchmarkPatternMatching(b *testing.B) {
 	for _, test := range patternBenchmarks {
-		csl := test.csl
+		cspl := test.cspl
 
 		var err error
-		if csl == "" {
-			csl, err = RegexToPattern(test.regex)
+		if cspl == "" {
+			cspl, err = RegexToPattern(test.regex)
 			if err != nil {
 				b.Fatalf("convert schema regex %q: %v", test.name, err)
 			}
 		}
 
-		program, err := Compile("pattern Benchmark { " + csl + " }")
+		program, err := Compile("pattern Benchmark { " + cspl + " }")
 		if err != nil {
-			b.Fatalf("compile CSL pattern %q: %v", test.name, err)
+			b.Fatalf("compile CSPL pattern %q: %v", test.name, err)
 		}
 
 		compiledRegex, err := regexp.Compile(`\A(?:` + test.regex + `)\z`)
@@ -88,13 +88,13 @@ func BenchmarkPatternMatching(b *testing.B) {
 		}
 
 		for _, value := range []string{test.value, "", "é", "٣", "ª", "Ⅻ", " ", "\t", "\u00a0", "\n", "x", "abc", "A7"} {
-			cslMatched, err := program.Match("Benchmark", value)
+			csplMatched, err := program.Match("Benchmark", value)
 			if err != nil {
-				b.Fatalf("match CSL pattern %q: %v", test.name, err)
+				b.Fatalf("match CSPL pattern %q: %v", test.name, err)
 			}
 
-			if regexMatched := compiledRegex.MatchString(value); cslMatched != regexMatched {
-				b.Fatalf("pattern %q disagrees for %q: CSL=%v regex=%v", test.name, value, cslMatched, regexMatched)
+			if regexMatched := compiledRegex.MatchString(value); csplMatched != regexMatched {
+				b.Fatalf("pattern %q disagrees for %q: CSPL=%v regex=%v", test.name, value, csplMatched, regexMatched)
 			}
 		}
 
@@ -187,7 +187,7 @@ func BenchmarkSchemaRegexPipeline(b *testing.B) {
 			b.Fatalf("schema pattern preflight failed for %s: matched=%v err=%v", test.name, matched, err)
 		}
 
-		b.Run(test.name+"/CSLConvert", func(b *testing.B) {
+		b.Run(test.name+"/CSPLConvert", func(b *testing.B) {
 			b.ReportAllocs()
 
 			for range b.N {
@@ -195,7 +195,7 @@ func BenchmarkSchemaRegexPipeline(b *testing.B) {
 			}
 		})
 
-		b.Run(test.name+"/CSLCompile", func(b *testing.B) {
+		b.Run(test.name+"/CSPLCompile", func(b *testing.B) {
 			b.ReportAllocs()
 
 			for range b.N {
@@ -211,7 +211,7 @@ func BenchmarkSchemaRegexPipeline(b *testing.B) {
 			}
 		})
 
-		b.Run(test.name+"/CSLMatch", func(b *testing.B) {
+		b.Run(test.name+"/CSPLMatch", func(b *testing.B) {
 			b.ReportAllocs()
 
 			for range b.N {
@@ -227,7 +227,7 @@ func BenchmarkSchemaRegexPipeline(b *testing.B) {
 			}
 		})
 
-		b.Run(test.name+"/CSLEndToEnd", func(b *testing.B) {
+		b.Run(test.name+"/CSPLEndToEnd", func(b *testing.B) {
 			b.ReportAllocs()
 
 			for range b.N {
