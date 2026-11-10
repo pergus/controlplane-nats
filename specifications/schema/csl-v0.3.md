@@ -49,7 +49,9 @@ The language is intended to be:
 
 CSL describes the logical structure and validity of resources. It does
 not define authorization, storage layout, API endpoints, reconciliation
-logic, controller implementation, or message-broker behavior.
+logic, controller implementation, or message-broker behavior. CSL
+relationship declarations define typed links between resource instances;
+the runtime enforces their target, lifecycle, and graph constraints.
 
 ## 2. Resource declarations and lifecycle sections
 
@@ -87,6 +89,7 @@ A resource declaration may contain:
 -   Resource-level fields.
 -   An optional `desired` section.
 -   An optional `observed` section.
+-   An optional `relationships` section.
 -   Nested objects and conditional declarations within permitted object
     scopes.
 
@@ -219,6 +222,7 @@ field name. The following table defines the keyword contexts:
 | `version` | Resource declaration header after the resource name | Valid as an ordinary field name |
 | `desired` | Lifecycle section declaration when followed by an object body `{ ... }` | Valid as a field name when followed by `:` |
 | `observed` | Lifecycle section declaration when followed by an object body `{ ... }` | Valid as a field name when followed by `:` |
+| `relationships` | Relationship section declaration when followed by an object body `{ ... }` | Valid as a field name when followed by `:` |
 | `if` | Conditional declaration in an object body | May be used as a field name when followed by `:` if the parser can distinguish the declaration |
 | `oneof` | Enumeration constraint after a type expression | May be used as a field name when followed by `:` |
 | `optional` | Field or nested-object modifier in modifier position | May be used as a field name when followed by `:` |
@@ -1023,8 +1027,10 @@ When creating a resource, the runtime must:
 6.  Evaluate conditional declarations.
 7.  Validate required fields.
 8.  Assign system-managed attributes.
-9.  Persist the resource and its creation event according to the control
-    plane's transaction model.
+9.  Validate each declared relationship and reject missing, deleted,
+    wrong-kind, or wrong-version targets; reject self-links and cycles.
+10. Persist the resource, its outgoing relationships, and its creation
+    event according to the control plane's transaction model.
 
 ### 11.2 Partial updates
 
@@ -1062,9 +1068,16 @@ The runtime must:
 6.  Persist the update atomically.
 7.  Increment `resource_version`.
 8.  Increment `generation` when desired state changes.
+9.  Validate relationship targets, cardinality, and graph constraints.
+10. Persist resource values and relationship changes atomically.
 
 The runtime must not interpret an omitted field as deletion, and must
 not replace unspecified fields with defaults or zero values.
+
+An omitted relationship is also unchanged by a patch. When a patch
+supplies a relationship, it replaces that relationship's complete
+value. The runtime must validate the resulting resource and relationship
+graph before it commits the update.
 
 ### 11.3 Removing fields
 
@@ -1122,6 +1135,13 @@ Rules:
 Migration between versions is a runtime concern and is not executable
 CSL functionality.
 
+Relationship declarations pin target schema versions. A new target
+schema version does not alter existing declarations or resource links.
+The runtime must reject migration of a target resource when the new
+schema version would violate an inbound relationship. A coordinated
+migration must explicitly update dependent resource schemas and links,
+then validate and commit all affected changes as one operation.
+
 ## 13. System-managed fields
 
 The runtime maintains internal fields independently of CSL. These fields
@@ -1148,6 +1168,77 @@ The exact representation and exposure of system-managed fields in API
 responses is a runtime/API concern. Their names are not declarations
 that users must include in CSL.
 
+### 2.5 Relationships
+
+The optional `relationships` section declares links from one resource
+kind to other resource kinds. Each relationship names a target resource
+kind and an exact target schema version.
+
+``` csl
+resource VirtualMachine version 1 {
+    relationships {
+        owner: User version 1
+        networks: Network version 2[1:8]
+        application: Application version 1 optional
+    }
+}
+```
+
+In a relationship declaration, `TargetKind version N` declares one
+required target. A list suffix declares an ordered collection of targets
+and uses the list cardinality rules in Section 5.1. For example,
+`Network version 2[1:8]` requires between one and eight targets. The
+`optional` modifier allows the relationship property to be omitted;
+when present, its target count must still meet the declared cardinality.
+Without `optional`, the relationship property is required. A target UID
+must not appear more than once in one relationship collection.
+
+Relationship values identify resources by immutable runtime `uid`; they
+do not embed the target resource. The runtime must verify that each
+target exists, is not deleted, has the declared kind, and has exactly
+the declared schema version. A reference to another resource of the
+same kind is permitted, but a resource must not reference its own UID.
+Relationship names must be unique within the section, and instances
+must not contain undeclared relationships.
+
+The source resource owns its outgoing relationships. Updating or
+deleting a source updates or removes its outgoing links. A target cannot
+change the source's relationship. The runtime must support reverse
+lookup by target UID so clients can find and search resources that refer
+to a target.
+
+The resource relationship graph must be acyclic. The runtime must reject
+an update that creates a cycle and must enforce this rule atomically so
+concurrent updates cannot create a cycle together.
+
+The runtime must reject deletion of a target while any resource refers
+to it. The caller must first remove or redirect every inbound
+relationship. This is a restrict-delete rule; deletion must not leave
+dangling relationships or invalidate the schema. If a relationship
+declaration names a target kind or schema version that is not registered,
+schema registration must fail and instances using that schema must not
+be created or updated until the dependency is available.
+
+Relationship collections preserve their declared order. Replacing a
+relationship collection through a patch replaces the complete
+collection; an omitted relationship is unchanged. Removing an optional
+relationship property uses the runtime's explicit field-removal
+operation. The runtime must validate the complete relationship set and
+commit relationship changes atomically with the resource update.
+
+The exact target schema version is part of the relationship contract.
+Registering a newer target schema version does not change existing
+relationships. Migrating a target resource to another schema version
+must be rejected if it would violate an inbound relationship. The
+runtime may perform a coordinated migration only when it updates the
+dependent resources and their relationship declarations explicitly and
+validates the resulting graph.
+
+Resource-kind schemas must not contain a cycle of required relationship
+dependencies. Such a cycle would prevent the runtime from creating the
+first valid resource instances while also requiring the instance graph
+to be acyclic.
+
 ## 14. Formal grammar
 
 The following EBNF defines the core grammar. It does not fully specify
@@ -1173,10 +1264,21 @@ resource_body            = "{"
 
 resource_member          = field_declaration
                          | lifecycle_section
+                                                 | relationships_section
                          | nested_object
                          | conditional_declaration ;
 
 lifecycle_section        = ("desired" | "observed") object_body ;
+
+relationships_section    = "relationships" "{"
+                                                     { relationship_declaration }
+                                                     "}" ;
+
+relationship_declaration
+                                                 = identifier ":" identifier
+                                                     "version" integer_literal
+                                                     [ list_suffix ]
+                                                     [ "optional" ] ;
 
 type_declaration         = "type" identifier
                            ( refined_type
@@ -1335,7 +1437,9 @@ string_literal           = '"' { character } '"' ;
 11. `desired` and `observed` introduce lifecycle sections when followed
     by an object body; when followed by `:`, they are ordinary field
     names.
-12. Implementations must reject ambiguous or unsupported syntax rather
+12. `relationships` introduces a relationship section when followed by
+    an object body; when followed by `:`, it is an ordinary field name.
+13. Implementations must reject ambiguous or unsupported syntax rather
     than guessing its meaning.
 
 The EBNF above is a working grammar. It does not yet fully formalize
@@ -1370,6 +1474,7 @@ Recommended canonical representations:
 | `map` | Object/map with canonical keys |
 | List | Ordered array |
 | Object | Named fields |
+| Relationship | Immutable target UID, or an ordered list of target UIDs |
 
 The wire representation must be stable across implementations. JSON
 resource documents should use:
@@ -1480,8 +1585,16 @@ responsible for:
 -   Assigning system-managed fields and runtime identity.
 -   Applying defaults on creation.
 -   Applying partial patches without replacing omitted fields.
+-   Resolving relationship targets by immutable UID and enforcing exact
+    target kind and schema-version matches.
+-   Enforcing relationship cardinality, UID uniqueness, self-link
+    rejection, and acyclic resource graphs.
+-   Enforcing restrict-delete behavior for resources with inbound
+    relationships and supporting reverse lookup by target UID.
 -   Distinguishing omission, explicit null, and explicit removal.
 -   Validating the complete resulting resource.
+-   Validating and atomically persisting resource values and outgoing
+    relationships.
 -   Persisting updates atomically according to the control plane's
     transaction model.
 -   Publishing resource-change events according to that transaction
